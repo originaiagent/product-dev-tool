@@ -77,111 +77,165 @@ competitors = data_store.list_by_parent("competitors", project_id)
 competitor_names = {c["id"]: c["name"] for c in competitors}
 
 # レビューアップロード
+# レビューアップロード
 col1, col2 = st.columns([4, 1])
-with col2:
-    uploaded_file = st.file_uploader(
-        "レビューをアップロード",
-        type=["csv", "xlsx"],
-        key="review_upload",
-        label_visibility="collapsed"
-    )
 
-if uploaded_file:
+# 新しいファイルアップロードウィジェットを使用
+from modules.file_upload_widget import render_file_uploader, get_dataframes_from_files
+
+with col2:
+    # レイアウト調整のための空要素
+    pass
+
+# ファイルアップローダー（幅広く対応）
+processed_files = render_file_uploader(
+    key="review_upload",
+    label="レビューファイルをアップロード（Excel・CSV・PDF・Word等）",
+    allowed_types=["csv", "xlsx", "xls", "txt", "md", "json", "pdf", "docx", "doc"],
+    max_files=10,
+    show_summary=True,
+    show_preview=False
+)
+
+if processed_files:
+    # データ処理
+    all_reviews = []
+    has_data = False
+    
     try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
+        # 1. 構造化データ（CSV/Excel）からの抽出
+        dataframes = get_dataframes_from_files(processed_files)
+        
+        if dataframes:
+            # プレビュー表示
+            with st.expander("📄 データプレビュー（Excel/CSV）", expanded=True):
+                # 最初のデータフレームを表示
+                first_name = list(dataframes.keys())[0]
+                st.caption(f"ファイル: {first_name}")
+                st.dataframe(dataframes[first_name].head(10))
+            
+            # 各データフレームからレビューを抽出
+            for name, df in dataframes.items():
+                # レビュー列を探索
+                review_column = None
+                for col in df.columns:
+                    col_str = str(col).lower()
+                    if "レビュー" in col_str or "review" in col_str or "コメント" in col_str or "本文" in col_str or "body" in col_str:
+                        review_column = col
+                        break
+                
+                if review_column is None and len(df.columns) > 0:
+                    review_column = df.columns[-1]  # 見つからない場合は最後の列
+                
+                if review_column:
+                    # テキスト化して追加
+                    df_reviews = df[review_column].astype(str).tolist()
+                    all_reviews.extend([r for r in df_reviews if r and r.lower() != 'nan' and r.lower() != 'none'])
+        
+        # 2. 非構造化データ（PDF/Word/Text）からの抽出
+        for pf in processed_files:
+            # CSV/Excel以外でテキストを持っているもの
+            if pf.get("type") not in ["csv", "excel"] and pf.get("text"):
+                # テキストを段落や行で分割してリスト化
+                text_content = pf["text"]
+                # 簡易的に改行で分割（空行を除く）
+                lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+                if lines:
+                    all_reviews.extend(lines)
+                    has_data = True
+
+        if all_reviews:
+            st.success(f"✅ 合計 {len(all_reviews)} 件のレビュー/テキストデータを抽出しました")
+            has_data = True
+        
+        if has_data:
+            # AI分析ボタン
+            if st.button("🤖 AIでレビューを分析", type="primary"):
+                with st.spinner("AI分析中...（件数が多い場合は時間がかかります）"):
+                    try:
+                        # テキスト結合（トークン制限を考慮して最大件数を制限）
+                        # 1件あたり平均100文字と仮定して、約200件程度に制限
+                        target_reviews = all_reviews[:200]
+                        reviews_text = "\n".join(target_reviews)
+                        
+                        if len(all_reviews) > 200:
+                            st.warning(f"⚠️ データ量が多いため、最初の200件のみを使用して分析します。（全{len(all_reviews)}件）")
+                        
+                        # 原子化プロンプト
+                        atomize_prompt = prompt_manager.load("atomize")
+                        if not atomize_prompt:
+                            atomize_prompt = prompt_manager.get_default("atomize")
+                        
+                        atomize_prompt = atomize_prompt.replace("{{reviews}}", reviews_text)
+                        
+                        # AI呼び出し（原子化）
+                        atomize_response = ai_provider.generate_with_retry(
+                            prompt=atomize_prompt,
+                            task="atomize"
+                        )
+                        
+                        # JSONを抽出
+                        if "```json" in atomize_response:
+                            json_str = atomize_response.split("```json")[1].split("```")[0]
+                        elif "```" in atomize_response:
+                            json_str = atomize_response.split("```")[1].split("```")[0]
+                        else:
+                            json_str = atomize_response
+                        
+                        keywords_data = json.loads(json_str.strip())
+                        keywords = keywords_data.get("keywords", [])
+                        
+                        # カテゴリ分類プロンプト
+                        categorize_prompt = prompt_manager.load("categorize")
+                        if not categorize_prompt:
+                            categorize_prompt = prompt_manager.get_default("categorize")
+                        
+                        keywords_text = json.dumps(keywords, ensure_ascii=False)
+                        categorize_prompt = categorize_prompt.replace("{{keywords}}", keywords_text)
+                        
+                        # AI呼び出し（カテゴリ分類）
+                        categorize_response = ai_provider.generate_with_retry(
+                            prompt=categorize_prompt,
+                            task="categorize"
+                        )
+                        
+                        if "```json" in categorize_response:
+                            json_str = categorize_response.split("```json")[1].split("```")[0]
+                        elif "```" in categorize_response:
+                            json_str = categorize_response.split("```")[1].split("```")[0]
+                        else:
+                            json_str = categorize_response
+                        
+                        categories_data = json.loads(json_str.strip())
+                        
+                        # 結果を保存
+                        review_analysis = {
+                            "project_id": project_id,
+                            "total_reviews": len(all_reviews), # 全件数を記録
+                            "analyzed_reviews": len(target_reviews),
+                            "categories": categories_data.get("categories", []),
+                            "keywords": keywords
+                        }
+                        
+                        # 既存のレビュー分析を削除して新規作成
+                        existing = data_store.list_by_parent("reviews", project_id)
+                        for ex in existing:
+                            data_store.delete("reviews", ex["id"])
+                        
+                        data_store.create("reviews", review_analysis)
+                        st.success("✅ レビュー分析が完了しました")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"分析エラー: {str(e)}")
+                        # デバッグ情報の表示
+                        # st.text(str(e))
         else:
-            df = pd.read_excel(uploaded_file)
-        
-        st.success(f"✅ {len(df)}件のレビューを読み込みました")
-        
-        with st.expander("📄 データプレビュー"):
-            st.dataframe(df.head(10))
-        
-        # AI分析ボタン
-        if st.button("🤖 AIでレビューを分析", type="primary"):
-            with st.spinner("AI分析中...（時間がかかる場合があります）"):
-                try:
-                    # レビューテキストを結合
-                    review_column = None
-                    for col in df.columns:
-                        if "レビュー" in col or "review" in col.lower() or "コメント" in col or "本文" in col:
-                            review_column = col
-                            break
-                    
-                    if review_column is None:
-                        review_column = df.columns[-1]  # 最後の列を使用
-                    
-                    reviews_text = "\n".join(df[review_column].astype(str).tolist()[:100])  # 最大100件
-                    
-                    # 原子化プロンプト
-                    atomize_prompt = prompt_manager.load("atomize")
-                    if not atomize_prompt:
-                        atomize_prompt = prompt_manager.get_default("atomize")
-                    
-                    atomize_prompt = atomize_prompt.replace("{{reviews}}", reviews_text)
-                    
-                    # AI呼び出し（原子化）
-                    atomize_response = ai_provider.generate_with_retry(
-                        prompt=atomize_prompt,
-                        task="atomize"
-                    )
-                    
-                    # JSONを抽出
-                    if "```json" in atomize_response:
-                        json_str = atomize_response.split("```json")[1].split("```")[0]
-                    elif "```" in atomize_response:
-                        json_str = atomize_response.split("```")[1].split("```")[0]
-                    else:
-                        json_str = atomize_response
-                    
-                    keywords_data = json.loads(json_str.strip())
-                    keywords = keywords_data.get("keywords", [])
-                    
-                    # カテゴリ分類プロンプト
-                    categorize_prompt = prompt_manager.load("categorize")
-                    if not categorize_prompt:
-                        categorize_prompt = prompt_manager.get_default("categorize")
-                    
-                    keywords_text = json.dumps(keywords, ensure_ascii=False)
-                    categorize_prompt = categorize_prompt.replace("{{keywords}}", keywords_text)
-                    
-                    # AI呼び出し（カテゴリ分類）
-                    categorize_response = ai_provider.generate_with_retry(
-                        prompt=categorize_prompt,
-                        task="categorize"
-                    )
-                    
-                    if "```json" in categorize_response:
-                        json_str = categorize_response.split("```json")[1].split("```")[0]
-                    elif "```" in categorize_response:
-                        json_str = categorize_response.split("```")[1].split("```")[0]
-                    else:
-                        json_str = categorize_response
-                    
-                    categories_data = json.loads(json_str.strip())
-                    
-                    # 結果を保存
-                    review_analysis = {
-                        "project_id": project_id,
-                        "total_reviews": len(df),
-                        "categories": categories_data.get("categories", []),
-                        "keywords": keywords
-                    }
-                    
-                    # 既存のレビュー分析を削除して新規作成
-                    existing = data_store.list_by_parent("reviews", project_id)
-                    for ex in existing:
-                        data_store.delete("reviews", ex["id"])
-                    
-                    data_store.create("reviews", review_analysis)
-                    st.success("✅ レビュー分析が完了しました")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"エラー: {str(e)}")
+            if not dataframes: # DFもなく、テキストも抽出できなかった場合
+                st.warning("アップロードされたファイルからテキストデータを抽出できませんでした。")
+
     except Exception as e:
-        st.error(f"ファイルの読み込みに失敗しました: {str(e)}")
+        st.error(f"処理エラー: {str(e)}")
 
 st.markdown("---")
 
