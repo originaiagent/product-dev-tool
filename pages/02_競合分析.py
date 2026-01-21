@@ -17,6 +17,7 @@ from modules.data_store import DataStore
 from modules.ai_provider import AIProvider
 from modules.prompt_manager import PromptManager
 from modules.ai_sidebar import render_ai_sidebar
+from modules.file_processor import FileProcessor
 
 # ページ設定
 st.set_page_config(
@@ -149,24 +150,44 @@ if competitors:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 画像アップロード
-                uploaded_images = st.file_uploader(
-                    "画像をアップロード（最大30枚）",
-                    type=["jpg", "jpeg", "png"],
+                # ファイルアップロード（拡張版）
+                uploaded_files = st.file_uploader(
+                    "ファイルをアップロード（画像・PDF・Excel・CSV等、最大30ファイル）",
+                    type=FileProcessor.get_all_extensions(),
                     accept_multiple_files=True,
-                    key=f"images_{comp['id']}"
+                    key=f"files_{comp['id']}"
                 )
                 
-                if uploaded_images:
-                    # 画像をbase64でエンコードして保存
+                if uploaded_files:
+                    # ファイルを処理
+                    processed_files = []
                     images_b64 = []
-                    for img in uploaded_images[:30]:
-                        b64 = base64.b64encode(img.read()).decode()
-                        images_b64.append(b64)
-                        img.seek(0)  # ポインタをリセット
+                    all_text = []
                     
-                    data_store.update("competitors", comp["id"], {"images": images_b64})
-                    st.caption(f"📷 {len(images_b64)}枚の画像をアップロード済み")
+                    for file in uploaded_files[:30]:
+                        result = FileProcessor.process_file(file)
+                        processed_files.append(result)
+                        
+                        # 画像の場合はbase64を保存
+                        if result.get("type") == "image" and result.get("base64"):
+                            images_b64.append(result["base64"])
+                        
+                        # テキスト情報があれば収集
+                        if result.get("text"):
+                            all_text.append(f"--- {result['filename']} ---\n{result['text']}")
+                    
+                    # データを更新
+                    update_data = {"images": images_b64}
+                    if all_text:
+                        # 既存のテキスト情報とマージ
+                        extracted_text = "\n\n".join(all_text)
+                        update_data["extracted_text"] = extracted_text
+                    
+                    data_store.update("competitors", comp["id"], update_data)
+                    
+                    # サマリー表示
+                    summary = FileProcessor.create_summary(processed_files)
+                    st.caption(summary)
                 
                 # テキスト情報
                 text_info = st.text_area(
@@ -193,9 +214,15 @@ if competitors:
                                 # 画像を準備
                                 images = comp.get("images", [])
                                 
+                                # テキスト情報を結合（手動入力 + ファイルから抽出）
+                                combined_text = text_info
+                                extracted_text = comp.get("extracted_text", "")
+                                if extracted_text:
+                                    combined_text += f"\n\n## ファイルから抽出した情報\n{extracted_text}"
+                                
                                 # AI呼び出し
                                 response = ai_provider.generate_with_retry(
-                                    prompt=f"{prompt}\n\n## テキスト情報\n{text_info}",
+                                    prompt=f"{prompt}\n\n## テキスト情報\n{combined_text}",
                                     task="extract",
                                     images=images[:5] if images else None  # 最大5枚
                                 )
