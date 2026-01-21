@@ -7,6 +7,7 @@
 import streamlit as st
 import sys
 import json
+import ast  # 追加: JSONパースのフォールバック用
 import pandas as pd
 from pathlib import Path
 
@@ -182,7 +183,15 @@ if processed_files:
                         else:
                             json_str = atomize_response
                         
-                        keywords_data = json.loads(json_str.strip())
+                        try:
+                            keywords_data = json.loads(json_str.strip())
+                        except json.JSONDecodeError:
+                            # フォールバック: ast.literal_evalを試みる（シングルクォート文字対策）
+                            try:
+                                keywords_data = ast.literal_eval(json_str.strip())
+                            except:
+                                raise  # 両方失敗した場合は元の例外など
+                        
                         keywords = keywords_data.get("keywords", [])
                         
                         # カテゴリ分類プロンプト
@@ -206,7 +215,15 @@ if processed_files:
                         else:
                             json_str = categorize_response
                         
-                        categories_data = json.loads(json_str.strip())
+                        try:
+                            categories_data = json.loads(json_str.strip())
+                        except json.JSONDecodeError:
+                            # フォールバック: ast.literal_evalを試みる
+                            try:
+                                categories_data = ast.literal_eval(json_str.strip())
+                            except:
+                                raise
+
                         
                         # 結果を保存
                         review_analysis = {
