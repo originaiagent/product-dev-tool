@@ -17,6 +17,7 @@ from modules.data_store import DataStore
 from modules.ai_provider import AIProvider
 from modules.prompt_manager import PromptManager
 from modules.ai_sidebar import render_ai_sidebar
+from modules.utils import parse_json_response
 
 # ページ設定
 st.set_page_config(
@@ -125,14 +126,14 @@ with col_gen:
                 )
                 
                 # JSON抽出
-                if "```json" in response:
-                    json_str = response.split("```json")[1].split("```")[0]
-                elif "```" in response:
-                    json_str = response.split("```")[1].split("```")[0]
-                else:
-                    json_str = response
+                try:
+                    ideas_data = parse_json_response(response)
+                except ValueError:
+                    st.error("AI応答の解析に失敗しました")
+                    # デバッグ用
+                    # st.text(response)
+                    ideas_data = {"ideas": []}
                 
-                ideas_data = json.loads(json_str.strip())
                 ideas = ideas_data.get("ideas", [])
                 
                 # 既存削除→新規作成

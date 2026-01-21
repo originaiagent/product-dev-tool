@@ -11,6 +11,7 @@ import ast  # 追加: JSONパースのフォールバック用
 import re   # 追加: 正規表現用
 import pandas as pd
 from pathlib import Path
+from modules.utils import parse_json_response
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -176,30 +177,14 @@ if processed_files:
                             task="atomize"
                         )
                         
-                        # JSONを抽出（堅牢版）
-                        json_str = atomize_response
-                        
-                        # コードブロック抽出を試みる
-                        match = re.search(r'```(?:json)?\s*(\{[\s\S]*\})\s*```', atomize_response)
-                        if match:
-                            json_str = match.group(1)
-                        else:
-                            # コードブロックが見つからないか、正規表現でマッチしない場合
-                            # { と } で囲まれている最外郭の範囲を抽出
-                            start = atomize_response.find('{')
-                            end = atomize_response.rfind('}')
-                            if start != -1 and end != -1 and end > start:
-                                json_str = atomize_response[start:end+1]
-
-                        
+                        # JSONを抽出（共通ユーティリティ使用）
                         try:
-                            keywords_data = json.loads(json_str.strip())
-                        except json.JSONDecodeError:
-                            # フォールバック: ast.literal_evalを試みる（シングルクォート文字対策）
-                            try:
-                                keywords_data = ast.literal_eval(json_str.strip())
-                            except:
-                                raise  # 両方失敗した場合は元の例外など
+                            keywords_data = parse_json_response(atomize_response)
+                        except ValueError:
+                             st.error("キーワード抽出の解析に失敗しました")
+                             # デバッグ用
+                             # st.text(atomize_response)
+                             keywords_data = {"keywords": []}
                         
                         keywords = keywords_data.get("keywords", [])
                         
@@ -217,26 +202,12 @@ if processed_files:
                             task="categorize"
                         )
                         
-                        # JSONを抽出（堅牢版）
-                        json_str = categorize_response
-                        
-                        match = re.search(r'```(?:json)?\s*(\{[\s\S]*\})\s*```', categorize_response)
-                        if match:
-                            json_str = match.group(1)
-                        else:
-                            start = categorize_response.find('{')
-                            end = categorize_response.rfind('}')
-                            if start != -1 and end != -1 and end > start:
-                                json_str = categorize_response[start:end+1]
-                        
+                        # JSONを抽出（共通ユーティリティ使用）
                         try:
-                            categories_data = json.loads(json_str.strip())
-                        except json.JSONDecodeError:
-                            # フォールバック: ast.literal_evalを試みる
-                            try:
-                                categories_data = ast.literal_eval(json_str.strip())
-                            except:
-                                raise
+                            categories_data = parse_json_response(categorize_response)
+                        except ValueError:
+                             st.error("カテゴリ分類の解析に失敗しました")
+                             categories_data = {"categories": []}
 
                         
                         # 結果を保存

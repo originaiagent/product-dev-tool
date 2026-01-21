@@ -18,6 +18,7 @@ from modules.ai_provider import AIProvider
 from modules.prompt_manager import PromptManager
 from modules.ai_sidebar import render_ai_sidebar
 from modules.file_processor import FileProcessor
+from modules.utils import parse_json_response
 
 # ページ設定
 st.set_page_config(
@@ -229,19 +230,11 @@ if competitors:
                                 
                                 # JSONを抽出
                                 try:
-                                    # ```json ... ``` の中身を抽出
-                                    if "```json" in response:
-                                        json_str = response.split("```json")[1].split("```")[0]
-                                    elif "```" in response:
-                                        json_str = response.split("```")[1].split("```")[0]
-                                    else:
-                                        json_str = response
-                                    
-                                    extracted = json.loads(json_str.strip())
+                                    extracted = parse_json_response(response)
                                     data_store.update("competitors", comp["id"], {"extracted_data": extracted})
                                     st.success("✅ 情報を抽出しました")
                                     st.rerun()
-                                except json.JSONDecodeError:
+                                except ValueError:
                                     st.error("AI応答の解析に失敗しました")
                                     st.text(response)
                             except Exception as e:
