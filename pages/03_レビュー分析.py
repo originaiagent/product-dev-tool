@@ -8,6 +8,7 @@ import streamlit as st
 import sys
 import json
 import ast  # 追加: JSONパースのフォールバック用
+import re   # 追加: 正規表現用
 import pandas as pd
 from pathlib import Path
 
@@ -175,13 +176,21 @@ if processed_files:
                             task="atomize"
                         )
                         
-                        # JSONを抽出
-                        if "```json" in atomize_response:
-                            json_str = atomize_response.split("```json")[1].split("```")[0]
-                        elif "```" in atomize_response:
-                            json_str = atomize_response.split("```")[1].split("```")[0]
+                        # JSONを抽出（堅牢版）
+                        json_str = atomize_response
+                        
+                        # コードブロック抽出を試みる
+                        match = re.search(r'```(?:json)?\s*(\{[\s\S]*\})\s*```', atomize_response)
+                        if match:
+                            json_str = match.group(1)
                         else:
-                            json_str = atomize_response
+                            # コードブロックが見つからないか、正規表現でマッチしない場合
+                            # { と } で囲まれている最外郭の範囲を抽出
+                            start = atomize_response.find('{')
+                            end = atomize_response.rfind('}')
+                            if start != -1 and end != -1 and end > start:
+                                json_str = atomize_response[start:end+1]
+
                         
                         try:
                             keywords_data = json.loads(json_str.strip())
@@ -208,12 +217,17 @@ if processed_files:
                             task="categorize"
                         )
                         
-                        if "```json" in categorize_response:
-                            json_str = categorize_response.split("```json")[1].split("```")[0]
-                        elif "```" in categorize_response:
-                            json_str = categorize_response.split("```")[1].split("```")[0]
+                        # JSONを抽出（堅牢版）
+                        json_str = categorize_response
+                        
+                        match = re.search(r'```(?:json)?\s*(\{[\s\S]*\})\s*```', categorize_response)
+                        if match:
+                            json_str = match.group(1)
                         else:
-                            json_str = categorize_response
+                            start = categorize_response.find('{')
+                            end = categorize_response.rfind('}')
+                            if start != -1 and end != -1 and end > start:
+                                json_str = categorize_response[start:end+1]
                         
                         try:
                             categories_data = json.loads(json_str.strip())
