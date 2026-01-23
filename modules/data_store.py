@@ -1,173 +1,279 @@
 """
-データストアモジュール
-- データの保存・読込・削除
+データストアモジュール (Supabase対応版)
+- Supabaseへのデータ保存・読込・削除
 - トレーサビリティ（親子関係の管理）
-- UUID管理
 """
-import json
+import os
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, List, Dict, Any
-
+from supabase import create_client, Client
 
 class DataStore:
-    """データ保存・管理クラス"""
+    """データ保存・管理クラス (Supabase)"""
     
-    # データタイプと親子関係の定義
+    # データタイプとSupabaseテーブル名のマッピング
+    TABLE_MAPPING = {
+        "projects": "projects",
+        "competitors": "competitors",
+        "reviews": "review_analysis",
+        "ideas": "differentiation_ideas"
+        # "positioning" は未使用のため除外
+    }
+
+    # 親子関係の定義 (削除時の連動用)
     DATA_HIERARCHY = {
-        "projects": None,  # ルート
+        "projects": None,
         "competitors": "projects",
         "reviews": "projects",
-        "ideas": "projects",
-        "positioning": "projects"
+        "ideas": "projects"
     }
     
     def __init__(self, data_dir: Optional[str] = None):
-        if data_dir is None:
-            self.data_dir = Path(__file__).parent.parent / "data"
-        else:
-            self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-    
-    def _get_filepath(self, data_type: str) -> Path:
-        """データタイプに応じたファイルパスを取得"""
-        return self.data_dir / f"{data_type}.json"
-    
-    def _load_all(self, data_type: str) -> List[Dict]:
-        """全データを読み込む"""
-        filepath = self._get_filepath(data_type)
-        if filepath.exists():
+        # data_dir引数は互換性のために残すが使用しない
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY")
+        
+        if not url or not key:
+            # Streamlit Secretsからの読み込みを試みる（ローカル実行時など）
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
-                return []
-        return []
+                import streamlit as st
+                url = st.secrets["SUPABASE_URL"]
+                key = st.secrets["SUPABASE_KEY"]
+            except:
+                pass
+
+        if not url or not key:
+            # 接続情報がない場合はエラーにはせず、空のクライアント状態にするか警告
+            print("Warning: SUPABASE_URL or SUPABASE_KEY not found.")
+            self.supabase: Optional[Client] = None
+        else:
+            self.supabase: Client = create_client(url, key)
     
-    def _save_all(self, data_type: str, data: List[Dict]) -> None:
-        """全データを保存"""
-        filepath = self._get_filepath(data_type)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+    def _get_table_name(self, data_type: str) -> Optional[str]:
+        return self.TABLE_MAPPING.get(data_type)
     
     def create(self, data_type: str, data: Dict) -> Dict:
-        """新規作成（UUID自動付与）"""
-        all_data = self._load_all(data_type)
+        """新規作成"""
+        if not self.supabase:
+            return data
+
+        table = self._get_table_name(data_type)
+        if not table:
+            return data
         
-        # UUID付与
+        # UUID付与 (Python側で生成して渡す)
         if "id" not in data:
             data["id"] = str(uuid.uuid4())
         
         # タイムスタンプ付与
         now = datetime.now().isoformat()
-        data["created_at"] = now
+        if "created_at" not in data:
+            data["created_at"] = now
         data["updated_at"] = now
         
-        all_data.append(data)
-        self._save_all(data_type, all_data)
+        try:
+            response = self.supabase.table(table).insert(data).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Supabase Create Error ({table}): {e}")
+        
         return data
     
     def get(self, data_type: str, id: str) -> Optional[Dict]:
         """IDでデータを取得"""
-        all_data = self._load_all(data_type)
-        for item in all_data:
-            if item.get("id") == id:
-                return item
+        if not self.supabase:
+            return None
+            
+        table = self._get_table_name(data_type)
+        if not table:
+            return None
+            
+        try:
+            response = self.supabase.table(table).select("*").eq("id", id).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Supabase Get Error ({table}): {e}")
+            
         return None
     
     def update(self, data_type: str, id: str, data: Dict) -> Optional[Dict]:
         """データを更新"""
-        all_data = self._load_all(data_type)
-        for i, item in enumerate(all_data):
-            if item.get("id") == id:
-                # 既存データをマージ
-                updated = {**item, **data}
-                updated["updated_at"] = datetime.now().isoformat()
-                all_data[i] = updated
-                self._save_all(data_type, all_data)
-                return updated
+        if not self.supabase:
+            return None
+
+        table = self._get_table_name(data_type)
+        if not table:
+            return None
+            
+        data["updated_at"] = datetime.now().isoformat()
+        
+        try:
+            response = self.supabase.table(table).update(data).eq("id", id).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+             print(f"Supabase Update Error ({table}): {e}")
+
         return None
     
     def delete(self, data_type: str, id: str) -> bool:
-        """データを削除（子データも連動削除）"""
-        all_data = self._load_all(data_type)
-        original_len = len(all_data)
-        all_data = [item for item in all_data if item.get("id") != id]
+        """データを削除（Cascade削除はDB設定に依存するが、ここでは明示的にも処理）"""
+        if not self.supabase:
+            return False
+
+        table = self._get_table_name(data_type)
+        if not table:
+            return False
+            
+        # 子データの削除コードを実行（DB側でCascade設定されていれば不要だが念のため）
+        self._delete_children(data_type, id)
         
-        if len(all_data) < original_len:
-            self._save_all(data_type, all_data)
-            # 子データも削除
-            self._delete_children(data_type, id)
+        try:
+            self.supabase.table(table).delete().eq("id", id).execute()
             return True
-        return False
+        except Exception as e:
+            print(f"Supabase Delete Error ({table}): {e}")
+            return False
     
     def _delete_children(self, parent_type: str, parent_id: str) -> None:
         """子データを削除"""
+        if not self.supabase:
+            return
+
         parent_key = f"{parent_type[:-1]}_id"  # projects -> project_id
         
         for child_type, parent in self.DATA_HIERARCHY.items():
             if parent == parent_type:
-                all_data = self._load_all(child_type)
-                all_data = [
-                    item for item in all_data 
-                    if item.get(parent_key) != parent_id
-                ]
-                self._save_all(child_type, all_data)
-    
+                table = self._get_table_name(child_type)
+                if table:
+                    try:
+                        self.supabase.table(table).delete().eq(parent_key, parent_id).execute()
+                    except Exception as e:
+                        print(f"Supabase Delete Children Error ({table}): {e}")
+
     def list(self, data_type: str, filters: Optional[Dict] = None) -> List[Dict]:
         """一覧取得（フィルタ対応）"""
-        all_data = self._load_all(data_type)
-        
-        if filters:
-            filtered = []
-            for item in all_data:
-                match = True
+        if not self.supabase:
+            return []
+
+        table = self._get_table_name(data_type)
+        if not table:
+            return []
+            
+        try:
+            query = self.supabase.table(table).select("*")
+            if filters:
                 for key, value in filters.items():
-                    if item.get(key) != value:
-                        match = False
-                        break
-                if match:
-                    filtered.append(item)
-            return filtered
-        
-        return all_data
+                    query = query.eq(key, value)
+            
+            response = query.execute()
+            return response.data
+        except Exception as e:
+            print(f"Supabase List Error ({table}): {e}")
+            return []
     
     def list_by_parent(self, data_type: str, parent_id: str) -> List[Dict]:
         """親IDでリスト取得"""
         parent_type = self.DATA_HIERARCHY.get(data_type)
         if parent_type:
+            # 特殊ケース: Supabaseのテーブル定義で外部キーカラム名が異なる場合はここで調整
             parent_key = f"{parent_type[:-1]}_id"
             return self.list(data_type, {parent_key: parent_id})
         return []
     
     def clear_children(self, parent_type: str, parent_id: str) -> None:
-        """子データをクリア（トレーサビリティ対応）"""
+        """子データをクリア"""
         self._delete_children(parent_type, parent_id)
     
     def clear_all(self, data_type: str) -> None:
-        """全データをクリア"""
-        self._save_all(data_type, [])
-    
+        """全データをクリア（開発用: 注意して使用）"""
+        if not self.supabase:
+            return
+
+        table = self._get_table_name(data_type)
+        if table:
+            try:
+                # 全件削除は危険なので、idがnot nullなど条件をつけて全件対象にする
+                self.supabase.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            except Exception as e:
+                print(f"Supabase Clear All Error ({table}): {e}")
+                
     def count(self, data_type: str, filters: Optional[Dict] = None) -> int:
         """件数を取得"""
-        return len(self.list(data_type, filters))
-    
+        if not self.supabase:
+            return 0
+            
+        table = self._get_table_name(data_type)
+        if not table:
+            return 0
+            
+        try:
+            query = self.supabase.table(table).select("*", count="exact", head=True)
+            if filters:
+                for key, value in filters.items():
+                    query = query.eq(key, value)
+            
+            response = query.execute()
+            return response.count
+        except Exception as e:
+            print(f"Supabase Count Error ({table}): {e}")
+            return 0
+
     def exists(self, data_type: str, id: str) -> bool:
         """存在確認"""
-        return self.get(data_type, id) is not None
-    
+        if not self.supabase:
+            return False
+            
+        table = self._get_table_name(data_type)
+        if not table:
+            return False
+
+        try:
+            response = self.supabase.table(table).select("id").eq("id", id).execute()
+            return len(response.data) > 0
+        except:
+            return False
+            
     def bulk_create(self, data_type: str, items: List[Dict]) -> List[Dict]:
         """一括作成"""
-        created = []
+        if not self.supabase or not items:
+            return []
+
+        table = self._get_table_name(data_type)
+        if not table:
+            return []
+            
+        # 共通処理
+        now = datetime.now().isoformat()
         for item in items:
-            created.append(self.create(data_type, item))
-        return created
-    
+            if "id" not in item:
+                item["id"] = str(uuid.uuid4())
+            if "created_at" not in item:
+                item["created_at"] = now
+            item["updated_at"] = now
+            
+        try:
+            response = self.supabase.table(table).insert(items).execute()
+            return response.data
+        except Exception as e:
+            print(f"Supabase Bulk Create Error ({table}): {e}")
+            return []
+            
     def bulk_delete(self, data_type: str, ids: List[str]) -> int:
         """一括削除"""
-        count = 0
-        for id in ids:
-            if self.delete(data_type, id):
-                count += 1
-        return count
+        if not self.supabase or not ids:
+            return 0
+            
+        table = self._get_table_name(data_type)
+        if not table:
+            return 0
+            
+        try:
+            response = self.supabase.table(table).delete().in_("id", ids).execute()
+            return len(response.data)
+        except Exception as e:
+            print(f"Supabase Bulk Delete Error ({table}): {e}")
+            return 0
