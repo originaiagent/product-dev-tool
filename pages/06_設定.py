@@ -144,9 +144,30 @@ with tab1:
     selected_model = model_ids[model_names.index(selected_model_name)]
     
     if st.button("LLM設定を保存", type="primary"):
+        st.write("--- デバッグ: 保存処理開始 ---")
+        st.write(f"選択プロバイダ: {selected_provider}")
+        st.write(f"選択モデル: {selected_model}")
+        
+        # 保存前の状態
+        st.write(f"保存前 settings._settings['ai']['models']: {settings._settings.get('ai', {}).get('models', {})}")
+        
+        # プロバイダ設定
         settings.set_provider(selected_provider)
+        st.write("set_provider 完了")
+        
+        # モデル設定
         settings.set_model(selected_model, selected_provider)
+        st.write("set_model 完了")
+        
+        # 保存後の状態
+        st.write(f"保存後 settings._settings['ai']['models']: {settings._settings.get('ai', {}).get('models', {})}")
+        
+        # Supabaseから直接確認
+        direct_check = data_store.get_settings()
+        st.write(f"Supabase直接確認: {direct_check.get('ai', {}).get('models', {}) if direct_check else 'None'}")
+        
         st.success("✅ LLM設定を保存しました")
+        st.write("--- デバッグ: 保存処理終了 ---")
     
     # タスク別モデル設定
     st.markdown("---")
