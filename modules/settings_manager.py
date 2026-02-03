@@ -204,12 +204,13 @@ class SettingsManager:
                 for model in genai.list_models():
                     if "generateContent" in model.supported_generation_methods:
                         model_id = model.name.replace("models/", "")
-                        # Gemmaを除外、Geminiのみ残す
-                        if model_id.startswith("gemini") and "gemma" not in model_id:
-                            models.append({
-                                "id": model_id,
-                                "name": f"{model.display_name}"
-                            })
+                        # Gemmaを除外（Geminiのみ残す）
+                        if not model_id.startswith("gemini"):
+                            continue
+                        models.append({
+                            "id": model_id,
+                            "name": f"{model.display_name}"
+                        })
             except Exception:
                 pass
         
