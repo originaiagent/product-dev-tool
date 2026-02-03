@@ -356,30 +356,84 @@ if competitors:
                     with m_col5:
                         st.metric("レビュー", extracted.get("review_power", "-"))
                     
-                    if "product_info" in extracted:
-                        # 新形式の表示
-                        col_info, col_feat = st.columns([1, 1])
+                    if "product_info" in extracted or "features" in extracted or "specs" in extracted:
+                        # 新形式の表示（徹底抽出版）
+                        
+                        # --- 基本情報 & スペック ---
+                        col_info, col_spec = st.columns([1, 1])
                         
                         with col_info:
-                            st.markdown("**📋 製品情報**")
+                            st.markdown("###### 📋 基本情報")
                             p_info = extracted.get("product_info", {})
-                            if isinstance(p_info, dict):
+                            if isinstance(p_info, dict) and p_info:
                                 for k, v in p_info.items():
-                                    if v and v != "不明":
-                                        st.write(f"- **{k}**: {v}")
-                            
+                                    st.write(f"- **{k}**: {v}")
+                            else:
+                                st.caption("情報なし")
+
+                            # USPとターゲット（基本情報の下に配置）
                             if extracted.get("usp"):
                                 st.info(f"✨ **USP**: {extracted.get('usp')}")
                             if extracted.get("target_audience"):
                                 st.caption(f"🎯 ターゲット: {extracted.get('target_audience')}")
 
-                        with col_feat:
-                            st.markdown("**✨ 特徴**")
-                            features = extracted.get("features", [])
-                            if isinstance(features, list):
+                        with col_spec:
+                            st.markdown("###### ⚙️ スペック")
+                            specs = extracted.get("specs", {})
+                            if isinstance(specs, dict) and specs:
+                                for k, v in specs.items():
+                                    st.write(f"- **{k}**: {v}")
+                            else:
+                                st.caption("情報なし")
+                        
+                        # --- バリエーション & 付属品 ---
+                        has_variations = extracted.get("variations")
+                        has_accessories = extracted.get("accessories")
+                        
+                        if has_variations or has_accessories:
+                            st.markdown("---")
+                            col_var, col_acc = st.columns([1, 1])
+                            
+                            with col_var:
+                                if has_variations:
+                                    st.markdown("###### 🎨 バリエーション")
+                                    vars = extracted.get("variations", {})
+                                    if isinstance(vars, dict):
+                                        for k, v in vars.items():
+                                            if isinstance(v, list):
+                                                st.write(f"- **{k}**: {', '.join(v)}")
+                                            else:
+                                                st.write(f"- **{k}**: {v}")
+                            
+                            with col_acc:
+                                if has_accessories:
+                                    st.markdown("###### 📦 付属品")
+                                    accs = extracted.get("accessories", [])
+                                    if isinstance(accs, list):
+                                        for acc in accs:
+                                            st.write(f"- {acc}")
+                                    else:
+                                        st.write(accs)
+
+                        # --- 特徴 ---
+                        st.markdown("---")
+                        st.markdown("###### ✨ 特徴")
+                        features = extracted.get("features", [])
+                        if isinstance(features, list) and features:
+                            # 数が多いのでExpanderにするか、あるいはスクロールで見るか
+                            # 20個以上目標なので、最初の5個を表示し、残りをExpanderにするとか
+                            if len(features) > 5:
+                                for f in features[:5]:
+                                    st.write(f"- {f}")
+                                with st.expander(f"すべての特徴を見る ({len(features)}個)"):
+                                    for f in features[5:]:
+                                        st.write(f"- {f}")
+                            else:
                                 for f in features:
                                     st.write(f"- {f}")
-                    
+                        else:
+                            st.caption("特徴情報なし")
+
                     elif "basic" in extracted:
                         # 暫定：旧中間形式（タブ形式）も維持
                         st.info("旧形式のデータです。再分析を推奨します。")
