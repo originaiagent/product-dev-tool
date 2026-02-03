@@ -57,6 +57,10 @@ if "current_project" not in st.session_state or not st.session_state.current_pro
 project = st.session_state.current_project
 project_id = project["id"]
 
+# session_stateで比較表を初期化（初回はSupabaseから取得）
+if "comparison_table" not in st.session_state:
+    st.session_state.comparison_table = data_store.get_comparison_table(project_id)
+
 # メインコンテンツ
 st.title("🔍 競合分析")
 st.caption("競合ごとに画像・テキストをアップロード → 情報を自動抽出")
@@ -443,10 +447,7 @@ if competitors:
     st.markdown("---")
     st.subheader("📊 ガチ比較表")
     st.caption("全競合のAI分析結果をまとめて比較します")
-    
-    # session_stateで結果を保持（初回はSupabaseから取得）
-    if "comparison_table" not in st.session_state:
-        st.session_state.comparison_table = data_store.get_comparison_table(project_id)
+
     
     if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
         if len(competitors) > 0:
