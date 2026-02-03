@@ -85,6 +85,7 @@ if st.session_state.show_add_competitor:
         
         name = st.text_input("競合名 *", placeholder="例: NIPLUX")
         url = st.text_input("URL（任意）", placeholder="https://amazon.co.jp/...")
+        price = st.text_input("価格", placeholder="例: 2,980円, 3,500円（税込）")
         platform = st.selectbox("プラットフォーム", ["Amazon", "楽天", "その他"])
         
         col_a, col_b, col_c = st.columns(3)
@@ -120,6 +121,7 @@ if st.session_state.show_add_competitor:
                 "project_id": project_id,
                 "name": name,
                 "url": url,
+                "price": price,
                 "platform": platform,
                 #"reviews": reviews, # 削除
                 "sales": sales * 10000 if sales else None,
@@ -489,7 +491,14 @@ if competitors:
                     # 競合データを整形
                     competitor_data = {}
                     for c in analyzed:
-                        competitor_data[c["name"]] = c["extracted_data"]
+                        ext = c.get("extracted_data", {})
+                        # 価格が抽出データにない場合、手入力の価格を補完
+                        if "product_info" not in ext:
+                            ext["product_info"] = {}
+                        if not ext["product_info"].get("価格") and c.get("price"):
+                            ext["product_info"]["価格"] = c["price"]
+                        
+                        competitor_data[c["name"]] = ext
                     
                     # AIに送信
                     full_prompt = f"{compare_prompt}\n\n## 競合データ\n```json\n{json.dumps(competitor_data, ensure_ascii=False, indent=2)}\n```"
