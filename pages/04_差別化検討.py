@@ -7,6 +7,8 @@
 import streamlit as st
 import sys
 import json
+import pandas as pd
+import altair as alt
 import plotly.graph_objects as go
 from pathlib import Path
 
@@ -56,6 +58,119 @@ project_id = project["id"]
 # メインコンテンツ
 st.title("💡 差別化検討")
 st.caption("差別化案を選択・組み合わせ")
+
+# レビュー分析データの取得
+review_analysis = data_store.get_review_analysis(project_id)
+
+if review_analysis and review_analysis.get("raw_data"):
+    st.subheader("📊 レビューキーワード分析")
+    
+    raw_data = review_analysis.get("raw_data", {})
+    raw_text = raw_data.get("text", "")
+    
+    # テキストからデータをパース（テーブル形式を想定）
+    # | カテゴリ | コア要素 | YSAGi | PLUS(プラス) | amesoba | ...
+    lines = raw_text.strip().split('\n')
+    
+    if len(lines) > 2:  # ヘッダー + 区切り + データ
+        # ヘッダー解析
+        header_line = lines[0]
+        headers = [h.strip() for h in header_line.split('|') if h.strip()]
+        
+        # 競合名を取得（3列目以降）
+        competitor_names = headers[2:] if len(headers) > 2 else []
+        
+        # データ解析
+        keyword_data = []
+        for line in lines[2:]:  # 区切り行をスキップ
+            if '|' in line and '---' not in line:
+                cells = [c.strip() for c in line.split('|') if c.strip()]
+                if len(cells) >= 3:
+                    keyword = cells[1] if len(cells) > 1 else cells[0]  # コア要素
+                    values = {}
+                    for i, comp in enumerate(competitor_names):
+                        try:
+                            val = int(cells[i + 2]) if i + 2 < len(cells) else 0
+                        except:
+                            val = 0
+                        values[comp] = val
+                    keyword_data.append({"keyword": keyword, **values})
+        
+        if keyword_data:
+            df = pd.DataFrame(keyword_data)
+            
+            # タブで切り替え
+            tab1, tab2 = st.tabs(["📊 キーワードTOP10", "🎯 競合別レーダー"])
+            
+            with tab1:
+                # 横棒グラフ：キーワード別合計TOP10
+                df_melted = df.melt(id_vars=['keyword'], var_name='competitor', value_name='count')
+                df_total = df_melted.groupby('keyword')['count'].sum().reset_index()
+                df_total = df_total.sort_values('count', ascending=False).head(10)
+                
+                chart = alt.Chart(df_total).mark_bar().encode(
+                    x=alt.X('count:Q', title='出現数（全競合合計）'),
+                    y=alt.Y('keyword:N', sort='-x', title='キーワード'),
+                    color=alt.value('#3b82f6'),
+                    tooltip=['keyword', 'count']
+                ).properties(
+                    height=400
+                )
+                st.altair_chart(chart, use_container_width=True)
+                st.caption("顧客が重視しているキーワードTOP10")
+            
+            with tab2:
+                # レーダーチャート用：正規化（各競合の合計を100%として割合に変換）
+                st.markdown("#### 競合別キーワード構成比")
+                st.caption("各競合のレビュー内でのキーワード出現割合（正規化済み）")
+                
+                # 上位6キーワードに絞る（レーダーチャートは多すぎると見づらい）
+                df_melted = df.melt(id_vars=['keyword'], var_name='competitor', value_name='count')
+                top_keywords = df_melted.groupby('keyword')['count'].sum().nlargest(6).index.tolist()
+                df_top = df[df['keyword'].isin(top_keywords)]
+                
+                # 各競合の合計を計算して正規化
+                competitor_cols = [c for c in df_top.columns if c != 'keyword']
+                totals = {col: df_top[col].sum() for col in competitor_cols}
+                
+                # 正規化したデータを作成
+                radar_data = []
+                for _, row in df_top.iterrows():
+                    entry = {"keyword": row["keyword"]}
+                    for col in competitor_cols:
+                        if totals[col] > 0:
+                            entry[col] = round(row[col] / totals[col] * 100, 1)
+                        else:
+                            entry[col] = 0
+                    radar_data.append(entry)
+                
+                df_radar = pd.DataFrame(radar_data)
+                df_radar_melted = df_radar.melt(id_vars=['keyword'], var_name='competitor', value_name='percentage')
+                
+                # Altairでレーダー風の表示（実際は折れ線グラフで代用）
+                # Streamlitの標準機能ではレーダーチャートがないため、テーブルとバーで表示
+                
+                # 競合ごとの構成比を横棒グラフで表示
+                for comp in competitor_cols[:4]:  # 最大4競合
+                    with st.expander(f"📈 {comp}", expanded=True):
+                        comp_data = df_radar[['keyword', comp]].sort_values(comp, ascending=False)
+                        chart = alt.Chart(comp_data).mark_bar().encode(
+                            x=alt.X(f'{comp}:Q', title='構成比（%）', scale=alt.Scale(domain=[0, 50])),
+                            y=alt.Y('keyword:N', sort='-x', title=''),
+                            color=alt.value('#10b981'),
+                            tooltip=['keyword', comp]
+                        ).properties(height=200)
+                        st.altair_chart(chart, use_container_width=True)
+                
+                st.info("💡 構成比が高い = その競合のレビューで特に言及されやすいキーワード")
+        else:
+            st.warning("データを解析できませんでした")
+    else:
+        st.info("レビュー分析データがありません。先にレビュー分析ページでデータをアップロードしてください。")
+else:
+    st.info("📝 レビュー分析データがありません。先にレビュー分析ページでデータをアップロードしてください。")
+
+st.markdown("---")
 
 # フィルター・ソート
 col_filter1, col_filter2, col_sort = st.columns([2, 2, 2])
