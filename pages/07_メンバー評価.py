@@ -23,15 +23,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# インスタンス
-@st.cache_resource
-def get_managers():
+# インスタンス (キャッシュを強制更新するためにキーを追加)
+@st.cache_resource(ttl=3600)
+def get_managers_v2():
     settings = SettingsManager()
     data_store = DataStore()
     ai_provider = AIProvider(settings)
     return settings, data_store, ai_provider
 
-settings, data_store, ai_provider = get_managers()
+settings, data_store, ai_provider = get_managers_v2()
 
 # サイドバー
 with st.sidebar:
