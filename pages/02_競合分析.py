@@ -133,15 +133,16 @@ if st.session_state.show_add_competitor:
                 #"reviews": reviews, # 削除
                 "sales": sales * 10000 if sales else None,
                 "units": units if units else None,
-                "seller_strength": seller_strength,
-                "brand_power": brand_power,
-                "specialization": specialization,
-                "page_quality": page_quality,
-                "review_power": review_power,
                 "images": [],
                 "image_urls": [],
                 "text_info": "",
-                "extracted_data": {}
+                "extracted_data": {
+                    "seller_strength": seller_strength,
+                    "brand_power": brand_power,
+                    "specialization": specialization,
+                    "page_quality": page_quality,
+                    "review_power": review_power,
+                }
             })
             st.session_state.show_add_competitor = False
             st.success(f"✅ 競合「{name}」を追加しました")
@@ -304,7 +305,14 @@ if competitors:
                                 # JSONを抽出
                                 try:
                                     extracted = parse_json_response(response)
-                                    data_store.update("competitors", comp["id"], {"extracted_data": extracted})
+                                    # 既存データを保持してマージ
+                                    current_data = comp.get("extracted_data", {}) or {}
+                                    if isinstance(current_data, dict):
+                                        current_data.update(extracted)
+                                    else:
+                                        current_data = extracted
+                                    
+                                    data_store.update("competitors", comp["id"], {"extracted_data": current_data})
                                     st.success("✅ 情報を抽出しました")
                                     st.rerun()
                                 except ValueError:
@@ -344,15 +352,15 @@ if competitors:
                     st.markdown("###### 📊 評価")
                     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
                     with m_col1:
-                        st.metric("セラー強さ", comp.get("seller_strength", "-"))
+                        st.metric("セラー強さ", extracted.get("seller_strength", "-"))
                     with m_col2:
-                        st.metric("ブランド力", comp.get("brand_power", "-"))
+                        st.metric("ブランド力", extracted.get("brand_power", "-"))
                     with m_col3:
-                        st.metric("専門店化", comp.get("specialization", "-"))
+                        st.metric("専門店化", extracted.get("specialization", "-"))
                     with m_col4:
-                        st.metric("ページ", comp.get("page_quality", "-"))
+                        st.metric("ページ", extracted.get("page_quality", "-"))
                     with m_col5:
-                        st.metric("レビュー", comp.get("review_power", "-"))
+                        st.metric("レビュー", extracted.get("review_power", "-"))
                     
                     if extracted.get("features"):
                         st.caption("✨ 特徴")
