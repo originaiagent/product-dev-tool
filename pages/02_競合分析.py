@@ -440,63 +440,102 @@ if competitors:
                 st.markdown("---")
     
     # ガチ比較表
-    # ガチ比較表
     st.markdown("---")
     st.subheader("📊 ガチ比較表")
     st.caption("全競合のAI分析結果をまとめて比較します")
     
     if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
         if len(competitors) > 0:
-            # ヘッダー
-            header_cols = ["項目", "自社目標"] + [c.get("name", "競合") for c in competitors]
+            # 全競合のキーを収集
+            all_spec_keys = set()
+            all_var_keys = set()
+            all_info_keys = set()
+            for comp in competitors:
+                extracted = comp.get("extracted_data", {})
+                all_spec_keys.update(extracted.get("specs", {}).keys())
+                all_var_keys.update(extracted.get("variations", {}).keys())
+                all_info_keys.update(extracted.get("product_info", {}).keys())
             
-            # テーブルデータ
-            table_data = []
+            # ヘッダー
+            header_cols = ["比較項目"] + [c.get("name", "競合") for c in competitors]
+            
+            # テーブルデータを構築
+            rows = []
             
             # URL行
-            url_row = ["URL", "-"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
+            url_row = ["商品URL"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
+            rows.append(url_row)
             
-            # 価格行
-            price_row = ["価格", "-"]
+            # product_info行（動的）
+            for key in sorted(all_info_keys):
+                info_row = [key]
+                for comp in competitors:
+                    extracted = comp.get("extracted_data", {})
+                    val = extracted.get("product_info", {}).get(key, "-")
+                    info_row.append(val if val else "-")
+                rows.append(info_row)
+            
+            # specs行（動的）
+            for key in sorted(all_spec_keys):
+                spec_row = [key]
+                for comp in competitors:
+                    extracted = comp.get("extracted_data", {})
+                    val = extracted.get("specs", {}).get(key, "-")
+                    spec_row.append(val if val else "-")
+                rows.append(spec_row)
+            
+            # variations行（動的）
+            for key in sorted(all_var_keys):
+                var_row = [key]
+                for comp in competitors:
+                    extracted = comp.get("extracted_data", {})
+                    vals = extracted.get("variations", {}).get(key, [])
+                    var_row.append(", ".join(vals) if vals else "-")
+                rows.append(var_row)
+            
+            # 付属品行
+            acc_row = ["付属品"]
+            has_accessories = False
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                # 新形式: product_info["価格"]
-                p = extracted.get("product_info", {}).get("価格")
-                if not p:
-                    # 中間形式: basic["price"]
-                    p = extracted.get("basic", {}).get("price")
-                if not p:
-                    # 旧形式: price
-                    p = extracted.get("price")
-                price_row.append(p or "-")
+                acc = extracted.get("accessories", [])
+                if acc:
+                    has_accessories = True
+                acc_row.append(", ".join(acc) if acc else "-")
+            if has_accessories:
+                rows.append(acc_row)
             
-            # 特徴、USP、ターゲット
-            feature_row = ["主な特徴", "-"]
-            usp_row = ["USP", "-"]
-            target_row = ["ターゲット", "-"]
-            
+            # USP行
+            usp_row = ["USP（独自の強み）"]
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                
-                # 特徴
+                usp_row.append(extracted.get("usp") or "-")
+            rows.append(usp_row)
+            
+            # ターゲット行
+            target_row = ["ターゲット層"]
+            for comp in competitors:
+                extracted = comp.get("extracted_data", {})
+                target_row.append(extracted.get("target_audience") or "-")
+            rows.append(target_row)
+            
+            # 特徴行（箇条書き、最大10個）
+            feature_row = ["主な特徴"]
+            for comp in competitors:
+                extracted = comp.get("extracted_data", {})
                 features = extracted.get("features", [])
-                feature_row.append("<br>".join(features[:5]) if features else "-")
-                
-                # USP
-                usp_row.append(extracted.get("usp", "-"))
-                
-                # ターゲット
-                target_row.append(extracted.get("target_audience", "-"))
+                if features:
+                    feature_row.append("・" + "・".join(features[:10]))
+                else:
+                    feature_row.append("-")
+            rows.append(feature_row)
             
             # Markdown テーブル作成
-            all_rows = [price_row, feature_row, usp_row, target_row]
-            
             md_table = "| " + " | ".join(header_cols) + " |\n"
             md_table += "| " + " | ".join(["---"] * len(header_cols)) + " |\n"
-            md_table += "| " + " | ".join(url_row) + " |\n"
-            
-            for row in all_rows:
-                md_table += "| " + " | ".join(str(cell).replace("\n", "<br>") for cell in row) + " |\n"
+            for row in rows:
+                cells = [str(cell).replace("\n", " ").replace("|", "｜") for cell in row]
+                md_table += "| " + " | ".join(cells) + " |\n"
             
             st.markdown(md_table, unsafe_allow_html=True)
         else:
