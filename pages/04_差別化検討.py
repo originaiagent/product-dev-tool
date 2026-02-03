@@ -120,49 +120,63 @@ if review_analysis and review_analysis.get("raw_data"):
                 st.caption("顧客が重視しているキーワードTOP10")
             
             with tab2:
-                # レーダーチャート用：正規化（各競合の合計を100%として割合に変換）
-                st.markdown("#### 競合別キーワード構成比")
+                # Plotlyでレーダーチャート
+                import plotly.graph_objects as go
+                
+                st.markdown("#### 競合別キーワード構成比（レーダーチャート）")
                 st.caption("各競合のレビュー内でのキーワード出現割合（正規化済み）")
                 
-                # 上位6キーワードに絞る（レーダーチャートは多すぎると見づらい）
+                # 上位6キーワードに絞る
                 df_melted = df.melt(id_vars=['keyword'], var_name='competitor', value_name='count')
                 top_keywords = df_melted.groupby('keyword')['count'].sum().nlargest(6).index.tolist()
                 df_top = df[df['keyword'].isin(top_keywords)]
                 
                 # 各競合の合計を計算して正規化
                 competitor_cols = [c for c in df_top.columns if c != 'keyword']
-                totals = {col: df_top[col].sum() for col in competitor_cols}
+                totals = {col: df[col].sum() for col in competitor_cols}  # 全キーワードの合計
                 
-                # 正規化したデータを作成
-                radar_data = []
-                for _, row in df_top.iterrows():
-                    entry = {"keyword": row["keyword"]}
-                    for col in competitor_cols:
-                        if totals[col] > 0:
-                            entry[col] = round(row[col] / totals[col] * 100, 1)
-                        else:
-                            entry[col] = 0
-                    radar_data.append(entry)
+                # レーダーチャート作成
+                fig = go.Figure()
                 
-                df_radar = pd.DataFrame(radar_data)
-                df_radar_melted = df_radar.melt(id_vars=['keyword'], var_name='competitor', value_name='percentage')
+                colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
                 
-                # Altairでレーダー風の表示（実際は折れ線グラフで代用）
-                # Streamlitの標準機能ではレーダーチャートがないため、テーブルとバーで表示
+                for i, comp in enumerate(competitor_cols[:6]):  # 最大6競合
+                    if totals[comp] > 0:
+                        values = []
+                        for keyword in top_keywords:
+                            row = df_top[df_top['keyword'] == keyword]
+                            if not row.empty:
+                                val = row[comp].values[0] / totals[comp] * 100
+                                values.append(round(val, 1))
+                            else:
+                                values.append(0)
+                        
+                        # 閉じるために最初の値を最後に追加
+                        values.append(values[0])
+                        keywords_closed = top_keywords + [top_keywords[0]]
+                        
+                        fig.add_trace(go.Scatterpolar(
+                            r=values,
+                            theta=keywords_closed,
+                            fill='toself',
+                            name=comp,
+                            line_color=colors[i % len(colors)],
+                            opacity=0.7
+                        ))
                 
-                # 競合ごとの構成比を横棒グラフで表示
-                for comp in competitor_cols[:4]:  # 最大4競合
-                    with st.expander(f"📈 {comp}", expanded=True):
-                        comp_data = df_radar[['keyword', comp]].sort_values(comp, ascending=False)
-                        chart = alt.Chart(comp_data).mark_bar().encode(
-                            x=alt.X(f'{comp}:Q', title='構成比（%）', scale=alt.Scale(domain=[0, 50])),
-                            y=alt.Y('keyword:N', sort='-x', title=''),
-                            color=alt.value('#10b981'),
-                            tooltip=['keyword', comp]
-                        ).properties(height=200)
-                        st.altair_chart(chart, use_container_width=True)
+                fig.update_layout(
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, max(30, max([max(trace.r) for trace in fig.data]) + 5) if fig.data else 30]
+                        )
+                    ),
+                    showlegend=True,
+                    height=500
+                )
                 
-                st.info("💡 構成比が高い = その競合のレビューで特に言及されやすいキーワード")
+                st.plotly_chart(fig, use_container_width=True)
+                st.info("💡 面積が大きいキーワード = その競合のレビューで特に言及されやすい要素")
         else:
             st.warning("データを解析できませんでした")
     else:
