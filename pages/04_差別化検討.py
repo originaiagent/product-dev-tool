@@ -124,16 +124,15 @@ if review_analysis and review_analysis.get("raw_data"):
                 import plotly.graph_objects as go
                 
                 st.markdown("#### 競合別キーワード構成比（レーダーチャート）")
-                st.caption("各競合のレビュー内でのキーワード出現割合（正規化済み）")
+                st.caption("各競合の上位6キーワードの構成比（各競合の6キーワード合計=100%）")
                 
                 # 上位6キーワードに絞る
                 df_melted = df.melt(id_vars=['keyword'], var_name='competitor', value_name='count')
                 top_keywords = df_melted.groupby('keyword')['count'].sum().nlargest(6).index.tolist()
-                df_top = df[df['keyword'].isin(top_keywords)]
+                df_top = df[df['keyword'].isin(top_keywords)].copy()
                 
-                # 各競合の合計を計算して正規化
+                # 競合カラム
                 competitor_cols = [c for c in df_top.columns if c != 'keyword']
-                totals = {col: df[col].sum() for col in competitor_cols}  # 全キーワードの合計
                 
                 # レーダーチャート作成
                 fig = go.Figure()
@@ -141,12 +140,16 @@ if review_analysis and review_analysis.get("raw_data"):
                 colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
                 
                 for i, comp in enumerate(competitor_cols[:6]):  # 最大6競合
-                    if totals[comp] > 0:
+                    # この競合の6キーワード合計
+                    total_6 = df_top[comp].sum()
+                    
+                    if total_6 > 0:
                         values = []
                         for keyword in top_keywords:
                             row = df_top[df_top['keyword'] == keyword]
                             if not row.empty:
-                                val = row[comp].values[0] / totals[comp] * 100
+                                # 6キーワード合計に対する割合
+                                val = row[comp].values[0] / total_6 * 100
                                 values.append(round(val, 1))
                             else:
                                 values.append(0)
@@ -161,22 +164,29 @@ if review_analysis and review_analysis.get("raw_data"):
                             fill='toself',
                             name=comp,
                             line_color=colors[i % len(colors)],
-                            opacity=0.7
+                            opacity=0.6
                         ))
                 
                 fig.update_layout(
                     polar=dict(
                         radialaxis=dict(
                             visible=True,
-                            range=[0, max(30, max([max(trace.r) for trace in fig.data]) + 5) if fig.data else 30]
+                            range=[0, 40]  # 最大40%（6キーワードなら平均約17%）
                         )
                     ),
                     showlegend=True,
-                    height=500
+                    height=500,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.2,
+                        xanchor="center",
+                        x=0.5
+                    )
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
-                st.info("💡 面積が大きいキーワード = その競合のレビューで特に言及されやすい要素")
+                st.info("💡 突出しているキーワード = その競合のレビューで特に重視されている要素")
         else:
             st.warning("データを解析できませんでした")
     else:
