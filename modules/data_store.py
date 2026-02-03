@@ -19,7 +19,9 @@ class DataStore:
         "reviews": "review_analysis",
         "ideas": "differentiation_ideas",
         "employee_personas": "employee_personas",
-        "employee_feedback": "employee_feedback"
+        "employee_personas": "employee_personas",
+        "employee_feedback": "employee_feedback",
+        "settings": "settings"
         # "positioning" は未使用のため除外
     }
 
@@ -316,3 +318,32 @@ class DataStore:
     def add_employee_feedback(self, data: Dict) -> Dict:
         """フィードバック追加"""
         return self.create("employee_feedback", data)
+
+    def get_settings(self) -> Optional[Dict]:
+        """設定取得（key='main'）"""
+        if not self.supabase:
+            return None
+        try:
+            response = self.supabase.table("settings").select("value").eq("key", "main").execute()
+            if response.data:
+                return response.data[0]["value"]
+        except Exception as e:
+            print(f"Supabase Get Settings Error: {e}")
+        return None
+
+    def save_settings(self, settings_data: Dict) -> bool:
+        """設定保存（key='main'）"""
+        if not self.supabase:
+            return False
+        try:
+            data = {
+                "key": "main",
+                "value": settings_data,
+                "updated_at": datetime.now().isoformat()
+            }
+            # upsert
+            self.supabase.table("settings").upsert(data).execute()
+            return True
+        except Exception as e:
+            print(f"Supabase Save Settings Error: {e}")
+            return False

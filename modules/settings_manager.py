@@ -8,26 +8,58 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Optional, List, Dict
+from datetime import datetime
 
 
 class SettingsManager:
     """設定管理クラス"""
     
-    def __init__(self, settings_path: Optional[str] = None):
+    def __init__(self, settings_path: Optional[str] = None, data_store: Optional[Any] = None):
         if settings_path is None:
             self.settings_path = Path(__file__).parent.parent / "data" / "settings.json"
         else:
             self.settings_path = Path(settings_path)
+        
+        # DataStoreの初期化 (依存注入または内部生成)
+        if data_store:
+            self.data_store = data_store
+        else:
+            try:
+                from modules.data_store import DataStore
+                self.data_store = DataStore()
+            except ImportError:
+                print("SettingsManager: Failed to import DataStore.")
+                self.data_store = None
+        
         self._settings = self._load()
     
     def _load(self) -> dict:
-        """設定ファイルを読み込む"""
+        """DataStoreから設定を読み込む。失敗時はローカルまたはデフォルトを返す"""
+        if self.data_store:
+            try:
+                # DataStoreのSupabase接続確認
+                if hasattr(self.data_store, 'supabase') and self.data_store.supabase:
+                    print("SettingsManager: Loading settings via DataStore...")
+                    remote_settings = self.data_store.get_settings()
+                    if remote_settings:
+                        print(f"SettingsManager: Loaded settings from Supabase.")
+                        return remote_settings
+                    else:
+                        print("SettingsManager: No settings found in Supabase (key='main'). Using defaults.")
+            except Exception as e:
+                print(f"SettingsManager: DataStore Load Error: {e}")
+
+        # フォールバック: ローカルファイル
         try:
             if self.settings_path.exists():
+                print(f"SettingsManager: Loading from local file: {self.settings_path}")
                 with open(self.settings_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"SettingsManager: Local Load Error: {e}")
             pass
+            
+        print("SettingsManager: Using default settings.")
         return self._default_settings()
     
     def _default_settings(self) -> dict:
@@ -48,7 +80,18 @@ class SettingsManager:
         }
     
     def _save(self) -> None:
-        """設定ファイルを保存"""
+        """DataStore経由で設定を保存"""
+        if self.data_store:
+            try:
+                if hasattr(self.data_store, 'supabase') and self.data_store.supabase:
+                    print("SettingsManager: Saving settings via DataStore...")
+                    if self.data_store.save_settings(self._settings):
+                        print("SettingsManager: Save successful.")
+                        return
+            except Exception as e:
+                print(f"SettingsManager: DataStore Save Error: {e}")
+
+        # フォールバック: ローカルファイル
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.settings_path, 'w', encoding='utf-8') as f:
             json.dump(self._settings, f, ensure_ascii=False, indent=2)

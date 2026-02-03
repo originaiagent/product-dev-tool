@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.settings_manager import SettingsManager
+from modules.manager_factory import get_managers
 from modules.prompt_manager import PromptManager
 
 # ページ設定
@@ -22,14 +22,10 @@ st.set_page_config(
 
 # インスタンス
 @st.cache_resource
-def get_settings():
-    return SettingsManager()
-
-@st.cache_resource
 def get_prompt_manager():
     return PromptManager()
 
-settings = get_settings()
+settings, data_store, storage_manager, ai_provider = get_managers()
 prompt_manager = get_prompt_manager()
 
 # サイドバー

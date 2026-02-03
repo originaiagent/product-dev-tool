@@ -12,9 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.data_store import DataStore
-from modules.ai_provider import AIProvider
-from modules.settings_manager import SettingsManager
+from modules.manager_factory import get_managers
 
 # ページ設定
 st.set_page_config(
@@ -23,15 +21,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# インスタンス (キャッシュを強制更新するためにキーを追加)
-@st.cache_resource(ttl=3600)
-def get_managers_v2():
-    settings = SettingsManager()
-    data_store = DataStore()
-    ai_provider = AIProvider(settings)
-    return settings, data_store, ai_provider
-
-settings, data_store, ai_provider = get_managers_v2()
+# インスタンス
+settings, data_store, storage_manager, ai_provider = get_managers()
 
 # サイドバー
 with st.sidebar:

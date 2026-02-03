@@ -9,10 +9,8 @@ from pathlib import Path
 # モジュールパスを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
-from modules.settings_manager import SettingsManager
-from modules.data_store import DataStore
-from modules.ai_provider import AIProvider
 from modules.ai_sidebar import render_ai_sidebar
+from modules.manager_factory import get_managers
 
 # ページ設定
 st.set_page_config(
@@ -24,20 +22,10 @@ st.set_page_config(
 
 # インスタンス初期化
 @st.cache_resource
-def get_settings():
-    return SettingsManager()
+def get_managers_cached():
+    return get_managers()
 
-@st.cache_resource
-def get_data_store():
-    return DataStore()
-
-@st.cache_resource
-def get_ai_provider(_settings):
-    return AIProvider(_settings)
-
-settings = get_settings()
-data_store = get_data_store()
-ai_provider = get_ai_provider(settings)
+settings, data_store, storage_manager, ai_provider = get_managers_cached()
 
 # カスタムCSS
 st.markdown("""

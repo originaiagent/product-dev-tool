@@ -9,8 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.settings_manager import SettingsManager
-from modules.data_store import DataStore
+from modules.manager_factory import get_managers
 
 # ページ設定
 st.set_page_config(
@@ -20,16 +19,7 @@ st.set_page_config(
 )
 
 # インスタンス
-@st.cache_resource
-def get_settings():
-    return SettingsManager()
-
-@st.cache_resource
-def get_data_store():
-    return DataStore()
-
-settings = get_settings()
-data_store = get_data_store()
+settings, data_store, storage_manager, ai_provider = get_managers()
 
 # サイドバー
 with st.sidebar:

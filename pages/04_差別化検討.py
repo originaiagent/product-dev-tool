@@ -12,9 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.settings_manager import SettingsManager
-from modules.data_store import DataStore
-from modules.ai_provider import AIProvider
+from modules.manager_factory import get_managers
 from modules.prompt_manager import PromptManager
 from modules.ai_sidebar import render_ai_sidebar
 from modules.utils import parse_json_response
@@ -28,24 +26,10 @@ st.set_page_config(
 
 # インスタンス
 @st.cache_resource
-def get_settings():
-    return SettingsManager()
-
-@st.cache_resource
-def get_data_store():
-    return DataStore()
-
-@st.cache_resource
-def get_ai_provider(_settings):
-    return AIProvider(_settings)
-
-@st.cache_resource
 def get_prompt_manager():
     return PromptManager()
 
-settings = get_settings()
-data_store = get_data_store()
-ai_provider = get_ai_provider(settings)
+settings, data_store, storage_manager, ai_provider = get_managers()
 prompt_manager = get_prompt_manager()
 
 # サイドバー

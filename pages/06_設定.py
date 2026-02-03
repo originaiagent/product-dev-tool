@@ -26,15 +26,10 @@ st.set_page_config(
 )
 
 # インスタンス (キャッシュを強制更新するためにキーを追加)
-@st.cache_resource(ttl=3600)
-def get_managers_v2():
-    settings = SettingsManager()
-    data_store = DataStore()
-    storage_manager = StorageManager()
-    ai_provider = AIProvider(settings)
-    return settings, data_store, storage_manager, ai_provider
+from modules.manager_factory import get_managers
 
-settings, data_store, storage_manager, ai_provider = get_managers_v2()
+# インスタンス取得
+settings, data_store, storage_manager, ai_provider = get_managers()
 
 # session_state初期化（メンバーAI用）
 if "member_form_data" not in st.session_state:
@@ -73,6 +68,23 @@ tab1, tab2, tab3, tab4 = st.tabs(["LLM設定", "APIキー", "メンバーAI", "�
 # LLM設定タブ
 with tab1:
     st.subheader("LLM設定")
+    
+    # === デバッグ情報 ===
+    with st.expander("🔧 デバッグ情報", expanded=True):
+        st.write("**現在のメモリ内設定:**")
+        st.json(settings._settings)
+        
+        st.write("**Supabaseから直接取得:**")
+        try:
+            direct_settings = data_store.get_settings()
+            st.json(direct_settings if direct_settings else {"error": "データなし"})
+        except Exception as e:
+            st.error(f"取得エラー: {e}")
+        
+        if st.button("キャッシュクリア＆リロード"):
+            st.cache_resource.clear()
+            st.rerun()
+    # === デバッグ情報ここまで ===
     
     # プロバイダ選択
     providers = settings.get_available_providers()
