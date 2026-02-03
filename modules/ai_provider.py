@@ -302,3 +302,26 @@ class AIProvider:
 
         # AIにリクエスト
         return self.generate_with_retry(prompt=prompt, task="evaluation")
+
+    def generate_with_image(self, prompt: str, base64_image: str) -> str:
+        """画像付きでテキスト生成"""
+        provider = self.settings.get_provider()
+        
+        if provider == "google":
+            _genai = _import_genai()
+            api_key = self.settings.get_api_key("google")
+            _genai.configure(api_key=api_key)
+            
+            model_name = self.settings.get_model()
+            model = _genai.GenerativeModel(model_name)
+            
+            # 画像データを準備
+            image_data = {
+                "mime_type": "image/png",
+                "data": base64_image
+            }
+            
+            response = model.generate_content([prompt, image_data])
+            return response.text
+        else:
+            raise ValueError(f"画像対応は現在Googleのみです")

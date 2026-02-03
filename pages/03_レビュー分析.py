@@ -40,34 +40,55 @@ if "review_uploader_key" not in st.session_state:
 st.subheader("📄 競合レビューシート")
 
 uploaded_file = st.file_uploader(
-    "レビューデータをアップロード（PDF/Excel/CSV）",
-    type=['pdf', 'xlsx', 'csv'],
+    "レビューデータをアップロード（PDF/Excel/CSV/画像）",
+    type=['pdf', 'xlsx', 'csv', 'png', 'jpg', 'jpeg'],
     key=f"review_upload_{st.session_state.review_uploader_key}"
 )
 
 if uploaded_file:
     with st.spinner("ファイルを解析中..."):
         try:
-            from modules.file_parser import FileParser
-            parser = FileParser()
-            
-            # バイトデータから解析
             content = uploaded_file.getvalue()
-            parsed = parser.parse_bytes(content, uploaded_file.name)
+            filename = uploaded_file.name
+            suffix = Path(filename).suffix.lower()
             
-            # 解析結果を保存
-            review_data = {
-                "filename": uploaded_file.name,
-                "type": parsed["type"],
-                "text": parsed["text"][:10000],  # 最大10000文字
-                "row_count": parsed.get("row_count"),
-                "columns": parsed.get("columns")
-            }
+            # 画像ファイルの場合
+            if suffix in ['.png', '.jpg', '.jpeg']:
+                # AIでOCR
+                import base64
+                base64_image = base64.b64encode(content).decode('utf-8')
+                
+                ocr_prompt = """この画像からテキストを全て抽出してください。
+表形式のデータがあれば、そのまま表形式で出力してください。
+レビューや口コミのデータがあれば、1件ずつ改行して出力してください。
+テキストのみ出力し、説明は不要です。"""
+                
+                # Geminiで画像解析
+                extracted_text = ai_provider.generate_with_image(ocr_prompt, base64_image)
+                
+                review_data = {
+                    "filename": filename,
+                    "type": "image",
+                    "text": extracted_text[:10000]
+                }
+            else:
+                # PDF/Excel/CSV
+                from modules.file_parser import FileParser
+                parser = FileParser()
+                parsed = parser.parse_bytes(content, filename)
+                
+                review_data = {
+                    "filename": filename,
+                    "type": parsed["type"],
+                    "text": parsed["text"][:10000],
+                    "row_count": parsed.get("row_count"),
+                    "columns": parsed.get("columns")
+                }
             
             data_store.save_review_analysis(project_id, {"raw_data": review_data})
             
             st.session_state.review_uploader_key += 1
-            st.success(f"✅ {uploaded_file.name} を解析しました")
+            st.success(f"✅ {filename} を解析しました")
             st.rerun()
             
         except Exception as e:
