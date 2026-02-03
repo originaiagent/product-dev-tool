@@ -98,11 +98,25 @@ if st.session_state.show_add_competitor:
         
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            reviews = st.number_input("レビュー数", min_value=0, value=0)
-        with col_b:
+            # reviews = st.number_input("レビュー数", min_value=0, value=0) # 削除
             sales = st.number_input("月間売上（万円）", min_value=0, value=0)
-        with col_c:
+        with col_b:
             units = st.number_input("月間販売数", min_value=0, value=0)
+        with col_c:
+             st.empty() # レイアウト調整
+
+        st.markdown("###### 評価指標 (1:弱い 〜 5:強い)")
+        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+        with col_m1:
+            seller_strength = st.selectbox("セラー強さ", [1, 2, 3, 4, 5], index=2)
+        with col_m2:
+            brand_power = st.selectbox("ブランド力", [1, 2, 3, 4, 5], index=2)
+        with col_m3:
+            specialization = st.selectbox("専門店化", [1, 2, 3, 4, 5], index=2)
+        with col_m4:
+            page_quality = st.selectbox("ページクオリティ", [1, 2, 3, 4, 5], index=2)
+        with col_m5:
+            review_power = st.selectbox("レビューパワー", [1, 2, 3, 4, 5], index=2)
         
         col_submit, col_cancel = st.columns(2)
         with col_submit:
@@ -116,12 +130,14 @@ if st.session_state.show_add_competitor:
                 "name": name,
                 "url": url,
                 "platform": platform,
-                "reviews": reviews,
+                #"reviews": reviews, # 削除
                 "sales": sales * 10000 if sales else None,
                 "units": units if units else None,
-                "reviews": reviews,
-                "sales": sales * 10000 if sales else None,
-                "units": units if units else None,
+                "seller_strength": seller_strength,
+                "brand_power": brand_power,
+                "specialization": specialization,
+                "page_quality": page_quality,
+                "review_power": review_power,
                 "images": [],
                 "image_urls": [],
                 "text_info": "",
@@ -308,16 +324,35 @@ if competitors:
                     st.markdown("---")
                     ext_col1, ext_col2, ext_col3 = st.columns(3)
                     with ext_col1:
-                        st.caption("⭐ レビュー数")
-                        st.write(f"{comp.get('reviews', 0):,}件")
-                    with ext_col2:
+                        # st.caption("⭐ レビュー数")
+                        # st.write(f"{comp.get('reviews', 0):,}件")
+                        st.caption("💰 月間売上")
                         if comp.get("sales"):
-                            st.caption("💰 月間売上")
                             st.write(f"¥{comp.get('sales', 0) // 10000:,}万")
-                    with ext_col3:
-                        if comp.get("units"):
-                            st.caption("📦 月間販売数")
+                        else:
+                            st.write("-")
+                    with ext_col2:
+                         st.caption("📦 月間販売数")
+                         if comp.get("units"):
                             st.write(f"{comp.get('units', 0):,}個")
+                         else:
+                            st.write("-")
+                    with ext_col3:
+                        st.empty()
+                    
+                    # 5指標のレーダーチャート的表示（簡易リスト）
+                    st.markdown("###### 📊 評価")
+                    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+                    with m_col1:
+                        st.metric("セラー強さ", comp.get("seller_strength", "-"))
+                    with m_col2:
+                        st.metric("ブランド力", comp.get("brand_power", "-"))
+                    with m_col3:
+                        st.metric("専門店化", comp.get("specialization", "-"))
+                    with m_col4:
+                        st.metric("ページ", comp.get("page_quality", "-"))
+                    with m_col5:
+                        st.metric("レビュー", comp.get("review_power", "-"))
                     
                     if extracted.get("features"):
                         st.caption("✨ 特徴")
