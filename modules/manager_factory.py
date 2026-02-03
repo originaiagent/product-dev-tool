@@ -6,7 +6,7 @@ from modules.ai_provider import AIProvider
 
 @st.cache_resource
 def get_managers():
-    """全マネージャーを一括初期化してキャッシュするファクトリー関数"""
+    """全マネージャーを一括初期化してキャッシュするファクトリー関数 - v1.1 refresh"""
     # DataStore初期化（Supabase接続）
     data_store = DataStore()
     

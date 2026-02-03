@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from supabase import create_client, Client
 
 class DataStore:
-    """データ保存・管理クラス (Supabase)"""
+    """データ保存・管理クラス (Supabase) - v1.1 refresh"""
     
     # データタイプとSupabaseテーブル名のマッピング
     TABLE_MAPPING = {

@@ -59,7 +59,11 @@ project_id = project["id"]
 
 # session_stateで比較表を初期化（初回はSupabaseから取得）
 if "comparison_table" not in st.session_state:
-    st.session_state.comparison_table = data_store.get_comparison_table(project_id)
+    if hasattr(data_store, "get_comparison_table"):
+        st.session_state.comparison_table = data_store.get_comparison_table(project_id)
+    else:
+        st.warning("⚠️ DataStoreの更新待ちです。アプリを再起動するかキャッシュをクリアしてください。")
+        st.session_state.comparison_table = None
 
 # メインコンテンツ
 st.title("🔍 競合分析")
