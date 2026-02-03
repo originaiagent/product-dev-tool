@@ -347,3 +347,28 @@ class DataStore:
         except Exception as e:
             print(f"Supabase Save Settings Error: {e}")
             return False
+
+    def save_comparison_table(self, project_id: str, table_md: str) -> bool:
+        """比較表を保存"""
+        if not self.supabase:
+            return False
+        try:
+            self.supabase.table("projects").update({
+                "comparison_table": table_md
+            }).eq("id", project_id).execute()
+            return True
+        except Exception as e:
+            print(f"Save comparison table error: {e}")
+            return False
+
+    def get_comparison_table(self, project_id: str) -> Optional[str]:
+        """比較表を取得"""
+        if not self.supabase:
+            return None
+        try:
+            response = self.supabase.table("projects").select("comparison_table").eq("id", project_id).execute()
+            if response.data and response.data[0].get("comparison_table"):
+                return response.data[0]["comparison_table"]
+        except Exception as e:
+            print(f"Get comparison table error: {e}")
+        return None

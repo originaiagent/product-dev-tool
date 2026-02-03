@@ -444,9 +444,9 @@ if competitors:
     st.subheader("📊 ガチ比較表")
     st.caption("全競合のAI分析結果をまとめて比較します")
     
-    # session_stateで結果を保持
+    # session_stateで結果を保持（初回はSupabaseから取得）
     if "comparison_table" not in st.session_state:
-        st.session_state.comparison_table = None
+        st.session_state.comparison_table = data_store.get_comparison_table(project_id)
     
     if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
         if len(competitors) > 0:
@@ -538,7 +538,9 @@ if competitors:
                 cells = [str(cell).replace("\n", " ").replace("|", "｜") for cell in row]
                 md_table += "| " + " | ".join(cells) + " |\n"
             
+            # session_stateとSupabaseに保存
             st.session_state.comparison_table = md_table
+            data_store.save_comparison_table(project_id, md_table)
         else:
             st.warning("競合データがありません")
     
@@ -549,6 +551,7 @@ if competitors:
         # クリアボタン
         if st.button("🗑️ 比較表をクリア", type="secondary"):
             st.session_state.comparison_table = None
+            data_store.save_comparison_table(project_id, None) # Supabaseからも削除
             st.rerun()
     
     # 次へボタン
