@@ -308,20 +308,25 @@ class AIProvider:
         provider = self.settings.get_provider()
         
         if provider == "google":
-            _genai = _import_genai()
+            import google.generativeai as genai
+            import base64
+            
             api_key = self.settings.get_api_key("google")
-            _genai.configure(api_key=api_key)
+            genai.configure(api_key=api_key)
             
             model_name = self.settings.get_model()
-            model = _genai.GenerativeModel(model_name)
+            model = genai.GenerativeModel(model_name)
+            
+            # base64をバイトにデコード
+            image_bytes = base64.b64decode(base64_image)
             
             # 画像データを準備
-            image_data = {
+            image_part = {
                 "mime_type": "image/png",
-                "data": base64_image
+                "data": image_bytes
             }
             
-            response = model.generate_content([prompt, image_data])
+            response = model.generate_content([prompt, image_part])
             return response.text
         else:
-            raise ValueError(f"画像対応は現在Googleのみです")
+            raise ValueError(f"画像対応は現在Googleのみです: {provider}")
