@@ -2,11 +2,13 @@
 設定ページ
 - LLM設定（プロバイダ・モデル選択）
 - APIキー状態確認
+- メンバーAI管理
 - タスク別モデル設定
 """
 import streamlit as st
 import sys
 import uuid
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -33,6 +35,12 @@ def get_managers_v2():
     return settings, data_store, storage_manager, ai_provider
 
 settings, data_store, storage_manager, ai_provider = get_managers_v2()
+
+# session_state初期化（メンバーAI用）
+if "member_form_data" not in st.session_state:
+    st.session_state.member_form_data = {}
+if "member_generated" not in st.session_state:
+    st.session_state.member_generated = False
 
 # サイドバー
 with st.sidebar:
@@ -137,7 +145,6 @@ with tab1:
 
 # APIキータブ
 with tab2:
-    # ... (existing content is same)
     st.subheader("APIキー設定状態")
     st.caption("環境変数から読み込まれます")
     
@@ -183,37 +190,60 @@ with tab3:
     st.subheader("メンバーAI設定")
     st.caption("商品企画を独自の視点で評価するAIメンバーを管理します")
 
-    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["メンバー一覧", "AIかんたん作成", "手動登録"])
+    sub_tab1, sub_tab2 = st.tabs(["メンバー一覧", "新規作成"])
 
     # 1. メンバー一覧
     with sub_tab1:
         members = data_store.get_employee_personas()
         if not members:
-            st.info("登録済みのメンバーはいません")
+            st.info("登録済みのメンバーはいません。「新規作成」タブからメンバーを追加してください。")
         else:
             for member in members:
-                with st.expander(f"{member.get('name') or '無名'} ({member.get('demographic') or '未設定'})"):
-                    col_img, col_info = st.columns([1, 4])
+                with st.expander(f"👤 {member.get('name') or '無名'}", expanded=False):
+                    col_img, col_info = st.columns([1, 3])
                     with col_img:
                         avatar_url = member.get("avatar_url")
                         if avatar_url:
-                            st.image(avatar_url, width=100)
+                            st.image(avatar_url, width=120)
                         else:
-                            st.write("No Image")
+                            st.markdown("🧑💼")
+                            st.caption("No Image")
+                    
                     with col_info:
-                        st.markdown(f"**評価の重点:** {member.get('evaluation_perspective')}")
-                        st.markdown(f"**性格・口調:** {member.get('personality_traits')}")
-                        
-                        col_edit, col_del = st.columns(2)
-                        with col_del:
-                            if st.button(f"削除: {member.get('name')}", key=f"del_{member['id']}", type="secondary"):
-                                if data_store.delete_employee_persona(member['id']):
-                                    st.success(f"削除しました: {member.get('name')}")
-                                    st.rerun()
+                        # 基本情報をカード形式で表示
+                        st.markdown(f"**基本属性:** {member.get('demographic') or '未設定'}")
+                        st.markdown(f"**評価の重点:** {member.get('evaluation_perspective') or '未設定'}")
+                        st.markdown(f"**性格・口調:** {member.get('personality_traits') or '未設定'}")
+                    
+                    # 詳細情報（折りたたみ内の追加情報）
+                    st.markdown("---")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**悩み・課題:** {member.get('pain_points') or '-'}")
+                        st.markdown(f"**情報リテラシー:** {member.get('info_literacy') or '-'}")
+                        st.markdown(f"**購入の決め手:** {member.get('purchase_trigger') or '-'}")
+                        st.markdown(f"**ライフスタイル:** {member.get('lifestyle') or '-'}")
+                    with col2:
+                        st.markdown(f"**価値観・関心:** {member.get('psychographic') or '-'}")
+                        st.markdown(f"**購買行動:** {member.get('buying_behavior') or '-'}")
+                        st.markdown(f"**NGポイント:** {member.get('ng_points') or '-'}")
+                    
+                    # 削除ボタン
+                    st.markdown("---")
+                    if st.button(f"🗑️ このメンバーを削除", key=f"del_{member['id']}", type="secondary"):
+                        if data_store.delete_employee_persona(member['id']):
+                            st.success(f"削除しました: {member.get('name')}")
+                            st.rerun()
 
-    # 2. AIかんたん作成
+    # 2. 新規作成（統合フロー）
     with sub_tab2:
-        st.write("20問の簡単な質問に答えるだけで、AIが詳細なプロフィールを生成します")
+        st.markdown("### 新規メンバー作成")
+        st.caption("アンケートに回答 → AIがプロフィール生成 → 確認・編集 → 保存")
+        
+        # ========== STEP 1: アンケート ==========
+        st.markdown("#### Step 1: アンケート回答")
+        st.caption("1〜6で回答してください（1: 全く思わない ⇔ 6: 強く思う）")
+        
         questions = [
             "新しいガジェットが好きだ", "商品の見た目より機能を重視する", "口コミを必ずチェックする",
             "ブランド品には目がない", "価格が安ければ品質は二の次だ", "限定品という言葉に弱い",
@@ -224,96 +254,219 @@ with tab3:
             "自分へのご褒美をよく買う", "投資だと思って高いものを買う"
         ]
         
+        # 2列でスライダー表示
+        col_left, col_right = st.columns(2)
         survey_answers = []
         for i, q in enumerate(questions):
-            ans = st.slider(f"Q{i+1}: {q}", 1, 6, 3, key=f"q_{i}")
-            survey_answers.append(f"{q}: {ans}")
-
-        member_name = st.text_input("メンバー名", "AIメンバーA", key="auto_name")
+            target_col = col_left if i % 2 == 0 else col_right
+            with target_col:
+                ans = st.slider(f"Q{i+1}: {q}", 1, 6, 3, key=f"survey_q_{i}")
+                survey_answers.append(f"{q}: {ans}")
         
-        if st.button("プロフィールを自動生成", type="primary"):
+        # 自由記述（任意）
+        st.markdown("#### 補足情報（任意）")
+        free_text = st.text_area(
+            "その他、このメンバーの特徴があれば記入してください",
+            placeholder="例：30代女性、子供2人の共働き主婦。時短商品に興味がある。",
+            key="free_text_input"
+        )
+        
+        # メンバー名
+        member_name = st.text_input("メンバー名", "AIメンバーA", key="new_member_name")
+        
+        # ========== STEP 2: AI生成ボタン ==========
+        st.markdown("---")
+        st.markdown("#### Step 2: プロフィール生成")
+        
+        if st.button("🤖 プロフィールを自動生成", type="primary", use_container_width=True):
             with st.spinner("AIがプロフィールを構築中..."):
                 survey_text = "\n".join(survey_answers)
+                additional = f"\n\n【補足情報】\n{free_text}" if free_text else ""
+                
                 prompt = f"""
-                以下の20問のアンケート結果（1:全く思わない〜6:強く思う）を元に、
-                商品企画を評価する「メンバーペルソナ」を詳細に作成してください。
-                回答者の特性を分析し、具体的で深みのある人物像にしてください。
+以下の20問のアンケート結果（1:全く思わない〜6:強く思う）を元に、
+商品企画を評価する「メンバーペルソナ」を詳細に作成してください。
+回答者の特性を分析し、具体的で深みのある人物像にしてください。
 
-                【アンケート結果】
-                {survey_text}
+【アンケート結果】
+{survey_text}
+{additional}
 
-                以下の項目を日本語のJSON形式で出力してください：
-                - evaluation_perspective (評価の重点)
-                - personality_traits (性格・口調)
-                - pain_points (悩み・課題)
-                - info_literacy (情報リテラシー)
-                - purchase_trigger (購入の決め手)
-                - lifestyle (ライフスタイル)
-                - psychographic (価値観・関心)
-                - demographic (基本属性)
-                - buying_behavior (購買行動)
-                - ng_points (NGポイント)
-                """
+以下の項目を日本語のJSON形式で出力してください（各項目は50〜100文字程度で具体的に）：
+- evaluation_perspective (評価の重点: この人が商品を見るときに最も重視するポイント)
+- personality_traits (性格・口調: 話し方や性格の特徴)
+- pain_points (悩み・課題: 日常で感じている不満や解決したい問題)
+- info_literacy (情報リテラシー: 情報収集の仕方やITスキル)
+- purchase_trigger (購入の決め手: 最終的に購入を決めるポイント)
+- lifestyle (ライフスタイル: 日常の過ごし方)
+- psychographic (価値観・関心: 大切にしていること、興味のある分野)
+- demographic (基本属性: 年代、性別、職業、家族構成など)
+- buying_behavior (購買行動: どこで何をどう買うか)
+- ng_points (NGポイント: 絶対に許せない・買わない条件)
+
+JSONのみを出力してください。説明文は不要です。
+"""
                 try:
-                    import json
                     res_text = ai_provider.generate_with_retry(prompt, task="atomize")
                     # JSON抽出
                     if "```json" in res_text:
                         res_text = res_text.split("```json")[1].split("```")[0]
-                    persona_data = json.loads(res_text)
+                    elif "```" in res_text:
+                        res_text = res_text.split("```")[1].split("```")[0]
+                    
+                    persona_data = json.loads(res_text.strip())
                     persona_data["name"] = member_name
                     
-                    added = data_store.add_employee_persona(persona_data)
-                    st.success(f"メンバー「{member_name}」を作成しました！")
-                    st.json(persona_data)
+                    # session_stateに保存（フォームに反映用）
+                    st.session_state.member_form_data = persona_data
+                    st.session_state.member_generated = True
+                    st.success("✅ プロフィールを生成しました！下記で確認・編集してください。")
                     st.rerun()
+                except json.JSONDecodeError as e:
+                    st.error(f"JSON解析エラー: {e}")
+                    st.text("AI応答:")
+                    st.code(res_text)
                 except Exception as e:
                     st.error(f"生成エラー: {e}")
-
-    # 3. 手動登録
-    with sub_tab3:
-        with st.form("manual_member_form"):
-            name = st.text_input("名前（必須）")
-            eval_p = st.text_area("評価の重点")
-            traits = st.text_area("性格・口調")
-            pains = st.text_area("悩み・課題")
-            literacy = st.text_input("情報リテラシー")
-            trigger = st.text_input("購入の決め手")
-            life = st.text_area("ライフスタイル")
-            psycho = st.text_area("価値観・関心")
-            demo = st.text_input("基本属性")
-            behavior = st.text_area("購買行動")
-            ng = st.text_area("NGポイント")
-            
-            avatar_file = st.file_uploader("アバター画像", type=["jpg", "png", "jpeg"])
-            
-            submitted = st.form_submit_button("登録", type="primary")
-            if submitted:
-                if not name:
+        
+        # ========== STEP 3: 確認・編集フォーム ==========
+        st.markdown("---")
+        st.markdown("#### Step 3: 確認・編集")
+        
+        if st.session_state.member_generated:
+            st.info("💡 生成されたプロフィールを確認し、必要に応じて編集してください。")
+        else:
+            st.caption("プロフィール生成後、ここに結果が表示されます。手動で入力することも可能です。")
+        
+        # フォームデータ取得
+        form_data = st.session_state.member_form_data
+        
+        # 編集フォーム
+        edit_name = st.text_input(
+            "名前（必須）", 
+            value=form_data.get("name", member_name),
+            key="edit_name"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            edit_demographic = st.text_input(
+                "基本属性",
+                value=form_data.get("demographic", ""),
+                placeholder="例: 30代後半、女性、会社員、既婚・子供2人",
+                key="edit_demographic"
+            )
+            edit_eval = st.text_area(
+                "評価の重点",
+                value=form_data.get("evaluation_perspective", ""),
+                height=80,
+                key="edit_eval"
+            )
+            edit_traits = st.text_area(
+                "性格・口調",
+                value=form_data.get("personality_traits", ""),
+                height=80,
+                key="edit_traits"
+            )
+            edit_pains = st.text_area(
+                "悩み・課題",
+                value=form_data.get("pain_points", ""),
+                height=80,
+                key="edit_pains"
+            )
+            edit_literacy = st.text_input(
+                "情報リテラシー",
+                value=form_data.get("info_literacy", ""),
+                key="edit_literacy"
+            )
+        
+        with col2:
+            edit_trigger = st.text_input(
+                "購入の決め手",
+                value=form_data.get("purchase_trigger", ""),
+                key="edit_trigger"
+            )
+            edit_life = st.text_area(
+                "ライフスタイル",
+                value=form_data.get("lifestyle", ""),
+                height=80,
+                key="edit_life"
+            )
+            edit_psycho = st.text_area(
+                "価値観・関心",
+                value=form_data.get("psychographic", ""),
+                height=80,
+                key="edit_psycho"
+            )
+            edit_behavior = st.text_area(
+                "購買行動",
+                value=form_data.get("buying_behavior", ""),
+                height=80,
+                key="edit_behavior"
+            )
+            edit_ng = st.text_area(
+                "NGポイント",
+                value=form_data.get("ng_points", ""),
+                height=80,
+                key="edit_ng"
+            )
+        
+        # ========== STEP 4: 画像アップロード ==========
+        st.markdown("---")
+        st.markdown("#### Step 4: アバター画像（任意）")
+        avatar_file = st.file_uploader(
+            "プロフィール画像をアップロード",
+            type=["jpg", "png", "jpeg"],
+            key="avatar_uploader"
+        )
+        
+        # ========== STEP 5: 保存 ==========
+        st.markdown("---")
+        st.markdown("#### Step 5: 保存")
+        
+        col_save, col_reset = st.columns([3, 1])
+        with col_save:
+            if st.button("💾 メンバーを保存", type="primary", use_container_width=True):
+                if not edit_name:
                     st.error("名前は必須です")
                 else:
+                    # 画像アップロード処理
                     avatar_url = ""
                     if avatar_file:
                         path = f"avatars/{uuid.uuid4()}_{avatar_file.name}"
                         avatar_url = storage_manager.upload_file(avatar_file, path)
                     
+                    # データ作成
                     new_member = {
-                        "name": name,
-                        "evaluation_perspective": eval_p,
-                        "personality_traits": traits,
-                        "pain_points": pains,
-                        "info_literacy": literacy,
-                        "purchase_trigger": trigger,
-                        "lifestyle": life,
-                        "psychographic": psycho,
-                        "demographic": demo,
-                        "buying_behavior": behavior,
-                        "ng_points": ng,
+                        "name": edit_name,
+                        "evaluation_perspective": edit_eval,
+                        "personality_traits": edit_traits,
+                        "pain_points": edit_pains,
+                        "info_literacy": edit_literacy,
+                        "purchase_trigger": edit_trigger,
+                        "lifestyle": edit_life,
+                        "psychographic": edit_psycho,
+                        "demographic": edit_demographic,
+                        "buying_behavior": edit_behavior,
+                        "ng_points": edit_ng,
                         "avatar_url": avatar_url
                     }
-                    data_store.add_employee_persona(new_member)
-                    st.success(f"メンバー「{name}」を登録しました")
-                    st.rerun()
+                    
+                    result = data_store.add_employee_persona(new_member)
+                    if result:
+                        st.success(f"✅ メンバー「{edit_name}」を保存しました！")
+                        # フォームリセット
+                        st.session_state.member_form_data = {}
+                        st.session_state.member_generated = False
+                        st.rerun()
+                    else:
+                        st.error("保存に失敗しました")
+        
+        with col_reset:
+            if st.button("🔄 リセット", use_container_width=True):
+                st.session_state.member_form_data = {}
+                st.session_state.member_generated = False
+                st.rerun()
 
 # 使用状況タブ
 with tab4:
