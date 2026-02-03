@@ -9,6 +9,7 @@ import streamlit as st
 import sys
 import uuid
 import json
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -84,6 +85,28 @@ with tab1:
         if st.button("キャッシュクリア＆リロード"):
             st.cache_resource.clear()
             st.rerun()
+            
+        st.divider()
+        st.write("**保存テスト**")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("テスト保存を実行"):
+                # 直接 data_store で保存テスト
+                test_data = data_store.get_settings() or {}
+                test_data["test_timestamp"] = str(datetime.now())
+                result = data_store.save_settings(test_data)
+                if result:
+                    st.success(f"保存成功: {test_data['test_timestamp']}")
+                else:
+                    st.error("保存失敗: data_store.save_settings() が False を返しました")
+
+        with col2:
+            if st.button("保存結果を確認"):
+                check_data = data_store.get_settings()
+                if check_data and "test_timestamp" in check_data:
+                    st.success(f"確認成功: {check_data['test_timestamp']}")
+                else:
+                    st.error("test_timestamp が見つかりません")
     # === デバッグ情報ここまで ===
     
     # プロバイダ選択
