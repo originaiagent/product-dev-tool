@@ -317,9 +317,10 @@ JSONのみを出力してください。説明文は不要です。
                     persona_data = json.loads(res_text.strip())
                     persona_data["name"] = member_name
                     
-                    # session_stateに保存（フォームに反映用）
+                    # session_stateに保存（フォームのvalueに反映される）
                     st.session_state.member_form_data = persona_data
                     st.session_state.member_generated = True
+                    
                     st.success("✅ プロフィールを生成しました！下記で確認・編集してください。")
                     st.rerun()
                 except json.JSONDecodeError as e:
@@ -329,9 +330,9 @@ JSONのみを出力してください。説明文は不要です。
                 except Exception as e:
                     st.error(f"生成エラー: {e}")
         
-        # ========== STEP 3: 確認・編集フォーム ==========
+        # ========== STEP 3〜5: 確認・編集・保存フォーム ==========
         st.markdown("---")
-        st.markdown("#### Step 3: 確認・編集")
+        st.markdown("#### Step 3: 確認・編集 → 保存")
         
         if st.session_state.member_generated:
             st.info("💡 生成されたプロフィールを確認し、必要に応じて編集してください。")
@@ -339,94 +340,82 @@ JSONのみを出力してください。説明文は不要です。
             st.caption("プロフィール生成後、ここに結果が表示されます。手動で入力することも可能です。")
         
         # フォームデータ取得
-        form_data = st.session_state.member_form_data
+        emp_to_edit = st.session_state.get('member_form_data', {})
         
-        # 編集フォーム
-        edit_name = st.text_input(
-            "名前（必須）", 
-            value=form_data.get("name", member_name),
-            key="edit_name"
-        )
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            edit_demographic = st.text_input(
-                "基本属性",
-                value=form_data.get("demographic", ""),
-                placeholder="例: 30代後半、女性、会社員、既婚・子供2人",
-                key="edit_demographic"
+        # st.form() を使用（LP Generatorと同じ方式）
+        with st.form("member_profile_form", clear_on_submit=False):
+            # 名前
+            edit_name = st.text_input(
+                "名前（必須）", 
+                value=emp_to_edit.get("name", "")
             )
-            edit_eval = st.text_area(
-                "評価の重点",
-                value=form_data.get("evaluation_perspective", ""),
-                height=80,
-                key="edit_eval"
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                edit_demographic = st.text_input(
+                    "基本属性",
+                    value=emp_to_edit.get("demographic", ""),
+                    placeholder="例: 30代後半、女性、会社員、既婚・子供2人"
+                )
+                edit_eval = st.text_area(
+                    "評価の重点",
+                    value=emp_to_edit.get("evaluation_perspective", ""),
+                    height=80
+                )
+                edit_traits = st.text_area(
+                    "性格・口調",
+                    value=emp_to_edit.get("personality_traits", ""),
+                    height=80
+                )
+                edit_pains = st.text_area(
+                    "悩み・課題",
+                    value=emp_to_edit.get("pain_points", ""),
+                    height=80
+                )
+                edit_literacy = st.text_input(
+                    "情報リテラシー",
+                    value=emp_to_edit.get("info_literacy", "")
+                )
+            
+            with col2:
+                edit_trigger = st.text_input(
+                    "購入の決め手",
+                    value=emp_to_edit.get("purchase_trigger", "")
+                )
+                edit_life = st.text_area(
+                    "ライフスタイル",
+                    value=emp_to_edit.get("lifestyle", ""),
+                    height=80
+                )
+                edit_psycho = st.text_area(
+                    "価値観・関心",
+                    value=emp_to_edit.get("psychographic", ""),
+                    height=80
+                )
+                edit_behavior = st.text_area(
+                    "購買行動",
+                    value=emp_to_edit.get("buying_behavior", ""),
+                    height=80
+                )
+                edit_ng = st.text_area(
+                    "NGポイント",
+                    value=emp_to_edit.get("ng_points", ""),
+                    height=80
+                )
+            
+            # 画像アップロード（フォーム内）
+            st.markdown("---")
+            st.markdown("**アバター画像（任意）**")
+            avatar_file = st.file_uploader(
+                "プロフィール画像をアップロード",
+                type=["jpg", "png", "jpeg"]
             )
-            edit_traits = st.text_area(
-                "性格・口調",
-                value=form_data.get("personality_traits", ""),
-                height=80,
-                key="edit_traits"
-            )
-            edit_pains = st.text_area(
-                "悩み・課題",
-                value=form_data.get("pain_points", ""),
-                height=80,
-                key="edit_pains"
-            )
-            edit_literacy = st.text_input(
-                "情報リテラシー",
-                value=form_data.get("info_literacy", ""),
-                key="edit_literacy"
-            )
-        
-        with col2:
-            edit_trigger = st.text_input(
-                "購入の決め手",
-                value=form_data.get("purchase_trigger", ""),
-                key="edit_trigger"
-            )
-            edit_life = st.text_area(
-                "ライフスタイル",
-                value=form_data.get("lifestyle", ""),
-                height=80,
-                key="edit_life"
-            )
-            edit_psycho = st.text_area(
-                "価値観・関心",
-                value=form_data.get("psychographic", ""),
-                height=80,
-                key="edit_psycho"
-            )
-            edit_behavior = st.text_area(
-                "購買行動",
-                value=form_data.get("buying_behavior", ""),
-                height=80,
-                key="edit_behavior"
-            )
-            edit_ng = st.text_area(
-                "NGポイント",
-                value=form_data.get("ng_points", ""),
-                height=80,
-                key="edit_ng"
-            )
-        
-        # ========== STEP 4: 画像アップロード ==========
-        st.markdown("---")
-        st.markdown("#### Step 4: アバター画像（任意）")
-        avatar_file = st.file_uploader(
-            "プロフィール画像をアップロード",
-            type=["jpg", "png", "jpeg"],
-            key="avatar_uploader"
-        )
-        
-        # ========== STEP 5: 保存 ==========
-        st.markdown("---")
-        st.markdown("#### Step 5: 保存")
-        
-        col_save, col_reset = st.columns([3, 1])
-        with col_save:
-            if st.button("💾 メンバーを保存", type="primary", use_container_width=True):
+            
+            # 保存ボタン
+            st.markdown("---")
+            submitted = st.form_submit_button("💾 メンバーを保存", type="primary", use_container_width=True)
+            
+            if submitted:
                 if not edit_name:
                     st.error("名前は必須です")
                 else:
@@ -462,11 +451,11 @@ JSONのみを出力してください。説明文は不要です。
                     else:
                         st.error("保存に失敗しました")
         
-        with col_reset:
-            if st.button("🔄 リセット", use_container_width=True):
-                st.session_state.member_form_data = {}
-                st.session_state.member_generated = False
-                st.rerun()
+        # リセットボタン（フォーム外）
+        if st.button("🔄 フォームをリセット"):
+            st.session_state.member_form_data = {}
+            st.session_state.member_generated = False
+            st.rerun()
 
 # 使用状況タブ
 with tab4:
