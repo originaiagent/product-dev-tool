@@ -69,50 +69,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["LLM設定", "APIキー", "メンバーAI", "�
 # LLM設定タブ
 with tab1:
     st.subheader("LLM設定")
-    
-    # === デバッグ情報 ===
-    with st.expander("🔧 デバッグ情報", expanded=True):
-        st.write("**SettingsManager の状態:**")
-        st.write(f"- settings.data_store: {settings.data_store}")
-        st.write(f"- settings.data_store.supabase: {settings.data_store.supabase if settings.data_store else 'N/A'}")
 
-        st.write("**現在のメモリ内設定:**")
-        st.json(settings._settings)
-        
-        st.write("**Supabaseから直接取得:**")
-        try:
-            direct_settings = data_store.get_settings()
-            st.json(direct_settings if direct_settings else {"error": "データなし"})
-        except Exception as e:
-            st.error(f"取得エラー: {e}")
-        
-        if st.button("キャッシュクリア＆リロード"):
-            st.cache_resource.clear()
-            st.rerun()
-            
-        st.divider()
-        st.write("**保存テスト**")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("テスト保存を実行"):
-                # 直接 data_store で保存テスト
-                test_data = data_store.get_settings() or {}
-                test_data["test_timestamp"] = str(datetime.now())
-                result = data_store.save_settings(test_data)
-                if result:
-                    st.success(f"保存成功: {test_data['test_timestamp']}")
-                else:
-                    st.error("保存失敗: data_store.save_settings() が False を返しました")
-
-        with col2:
-            if st.button("保存結果を確認"):
-                check_data = data_store.get_settings()
-                if check_data and "test_timestamp" in check_data:
-                    st.success(f"確認成功: {check_data['test_timestamp']}")
-                else:
-                    st.error("test_timestamp が見つかりません")
-    # === デバッグ情報ここまで ===
-    
     # プロバイダ選択
     providers = settings.get_available_providers()
     current_provider = settings.get_provider()
@@ -144,30 +101,9 @@ with tab1:
     selected_model = model_ids[model_names.index(selected_model_name)]
     
     if st.button("LLM設定を保存", type="primary"):
-        st.write("--- デバッグ: 保存処理開始 ---")
-        st.write(f"選択プロバイダ: {selected_provider}")
-        st.write(f"選択モデル: {selected_model}")
-        
-        # 保存前の状態
-        st.write(f"保存前 settings._settings['ai']['models']: {settings._settings.get('ai', {}).get('models', {})}")
-        
-        # プロバイダ設定
         settings.set_provider(selected_provider)
-        st.write("set_provider 完了")
-        
-        # モデル設定
         settings.set_model(selected_model, selected_provider)
-        st.write("set_model 完了")
-        
-        # 保存後の状態
-        st.write(f"保存後 settings._settings['ai']['models']: {settings._settings.get('ai', {}).get('models', {})}")
-        
-        # Supabaseから直接確認
-        direct_check = data_store.get_settings()
-        st.write(f"Supabase直接確認: {direct_check.get('ai', {}).get('models', {}) if direct_check else 'None'}")
-        
         st.success("✅ LLM設定を保存しました")
-        st.write("--- デバッグ: 保存処理終了 ---")
     
     # タスク別モデル設定
     st.markdown("---")
