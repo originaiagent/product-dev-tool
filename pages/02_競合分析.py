@@ -159,8 +159,11 @@ competitors = data_store.list_by_parent("competitors", project_id)
 
 if competitors:
     # 競合カード（2列）
-    cols = st.columns(2)
     for i, comp in enumerate(competitors):
+        # 2つごとに新しいカラム行を作成（レイアウト崩れ防止）
+        if i % 2 == 0:
+            cols = st.columns(2)
+        
         with cols[i % 2]:
             with st.container():
                 # ヘッダー
