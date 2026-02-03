@@ -8,6 +8,7 @@ import streamlit as st
 import sys
 import json
 import base64
+from urllib.parse import unquote
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,6 +20,7 @@ from modules.prompt_manager import PromptManager
 from modules.ai_sidebar import render_ai_sidebar
 from modules.file_processor import FileProcessor
 from modules.utils import parse_json_response
+from modules.storage_manager import StorageManager
 
 # ページ設定
 st.set_page_config(
@@ -48,6 +50,7 @@ settings = get_settings()
 data_store = get_data_store()
 ai_provider = get_ai_provider(settings)
 prompt_manager = get_prompt_manager()
+storage_manager = StorageManager()
 
 # サイドバー
 with st.sidebar:
@@ -116,7 +119,11 @@ if st.session_state.show_add_competitor:
                 "reviews": reviews,
                 "sales": sales * 10000 if sales else None,
                 "units": units if units else None,
+                "reviews": reviews,
+                "sales": sales * 10000 if sales else None,
+                "units": units if units else None,
                 "images": [],
+                "image_urls": [],
                 "text_info": "",
                 "extracted_data": {}
             })
@@ -169,16 +176,33 @@ if competitors:
                         result = FileProcessor.process_file(file)
                         processed_files.append(result)
                         
-                        # 画像の場合はbase64を保存
-                        if result.get("type") == "image" and result.get("base64"):
-                            images_b64.append(result["base64"])
+                        # 画像の場合はStorageにアップロード
+                        if result.get("type") == "image":
+                            # base64があればプレビュー用に保持（UI応答性のため）
+                            if result.get("base64"):
+                                images_b64.append(result["base64"])
+                            
+                            # Supabase Storageへアップロード
+                            path = f"competitors/{comp['id']}/{file.name}"
+                            # fileはStreamlitのUploadedFileなのでそのまま渡せる
+                            # カーソルをリセット
+                            file.seek(0)
+                            url = storage_manager.upload_file(file, path, content_type=file.type)
+                            if url:
+                                if "image_urls" not in comp:
+                                    comp["image_urls"] = []
+                                if url not in comp.get("image_urls", []):
+                                    comp.setdefault("image_urls", []).append(url)
                         
                         # テキスト情報があれば収集
                         if result.get("text"):
                             all_text.append(f"--- {result['filename']} ---\n{result['text']}")
                     
                     # データを更新
-                    update_data = {"images": images_b64}
+                    update_data = {
+                        "images": images_b64,  # 後方互換性と即時表示用（将来的に廃止可）
+                        "image_urls": comp.get("image_urls", [])
+                    }
                     if all_text:
                         # 既存のテキスト情報とマージ
                         extracted_text = "\n\n".join(all_text)
@@ -189,6 +213,15 @@ if competitors:
                     # サマリー表示
                     summary = FileProcessor.create_summary(processed_files)
                     st.caption(summary)
+                
+                # 保存された画像の表示
+                saved_image_urls = comp.get("image_urls", [])
+                if saved_image_urls:
+                    st.markdown("###### 🖼️ 保存済み画像")
+                    # カルーセル風あるいはグリッド表示
+                    # スペースの都合上、Expanderにするか、小さく表示
+                    with st.expander(f"画像 ({len(saved_image_urls)}枚)", expanded=False):
+                        st.image(saved_image_urls, width=150, caption=[url.split("/")[-1] for url in saved_image_urls])
                 
                 # テキスト情報
                 text_info = st.text_area(
@@ -214,6 +247,30 @@ if competitors:
                                 
                                 # 画像を準備
                                 images = comp.get("images", [])
+                                image_urls = comp.get("image_urls", [])
+                                
+                                # 画像データがない場合、URLから取得を試みる
+                                if not images and image_urls:
+                                    for url in image_urls[:5]: # 最大5枚
+                                        # URLからパスを抽出（簡易的）
+                                        # get_public_urlの結果からパスを逆算するのは難しい場合があるので、
+                                        # ファイル名がわかれば再構築するか、あるいはURLをそのまま扱えるようにするか。
+                                        # ここではStorageManagerにURLからダウンロードする機能がないため（パスが必要）、
+                                        # パスを推測するか、別途パスを保存しておくべきだった。
+                                        # しかし、upload時は `competitors/{comp['id']}/{filename}` としている。
+                                        # URL: .../object/public/product-dev-images/competitors/...
+                                        try:
+                                            # URLからパス部分を抽出
+                                            path_part = url.split(f"/public/{storage_manager.BUCKET_NAME}/")[-1]
+                                            # URLデコード (スペース -> %20 などを戻す)
+                                            path_part = unquote(path_part)
+                                            img_bytes = storage_manager.get_file_bytes(path_part)
+                                            if img_bytes:
+                                                import base64
+                                                b64_str = base64.b64encode(img_bytes).decode('utf-8')
+                                                images.append(b64_str)
+                                        except Exception as e:
+                                            print(f"Error fetching image from storage: {e}")
                                 
                                 # テキスト情報を結合（手動入力 + ファイルから抽出）
                                 combined_text = text_info

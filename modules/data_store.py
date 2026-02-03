@@ -17,7 +17,9 @@ class DataStore:
         "projects": "projects",
         "competitors": "competitors",
         "reviews": "review_analysis",
-        "ideas": "differentiation_ideas"
+        "ideas": "differentiation_ideas",
+        "employee_personas": "employee_personas",
+        "employee_feedback": "employee_feedback"
         # "positioning" は未使用のため除外
     }
 
@@ -26,7 +28,8 @@ class DataStore:
         "projects": None,
         "competitors": "projects",
         "reviews": "projects",
-        "ideas": "projects"
+        "ideas": "projects",
+        "employee_feedback": "employee_personas"
     }
     
     def __init__(self, data_dir: Optional[str] = None):
@@ -277,3 +280,39 @@ class DataStore:
         except Exception as e:
             print(f"Supabase Bulk Delete Error ({table}): {e}")
             return 0
+
+    def get_employee_personas(self) -> List[Dict]:
+        """全メンバー取得"""
+        return self.list("employee_personas")
+
+    def add_employee_persona(self, data: Dict) -> Dict:
+        """新規メンバー追加"""
+        return self.create("employee_personas", data)
+
+    def update_employee_persona(self, id: str, data: Dict) -> Optional[Dict]:
+        """メンバー情報更新"""
+        return self.update("employee_personas", id, data)
+
+    def delete_employee_persona(self, id: str) -> bool:
+        """メンバー削除"""
+        return self.delete("employee_personas", id)
+
+    def get_employee_feedback(self, employee_id: str, limit: int = 10) -> List[Dict]:
+        """フィードバック取得"""
+        if not self.supabase:
+            return []
+        try:
+            response = self.supabase.table("employee_feedback") \
+                .select("*") \
+                .eq("employee_id", employee_id) \
+                .order("created_at", descending=True) \
+                .limit(limit) \
+                .execute()
+            return response.data
+        except Exception as e:
+            print(f"Supabase Get Feedback Error: {e}")
+            return []
+
+    def add_employee_feedback(self, data: Dict) -> Dict:
+        """フィードバック追加"""
+        return self.create("employee_feedback", data)

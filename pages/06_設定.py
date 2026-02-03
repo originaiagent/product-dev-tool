@@ -6,11 +6,15 @@
 """
 import streamlit as st
 import sys
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from modules.settings_manager import SettingsManager
+from modules.data_store import DataStore
+from modules.storage_manager import StorageManager
+from modules.ai_provider import AIProvider
 
 # ページ設定
 st.set_page_config(
@@ -21,10 +25,14 @@ st.set_page_config(
 
 # インスタンス
 @st.cache_resource
-def get_settings():
-    return SettingsManager()
+def get_managers():
+    settings = SettingsManager()
+    data_store = DataStore()
+    storage_manager = StorageManager()
+    ai_provider = AIProvider(settings)
+    return settings, data_store, storage_manager, ai_provider
 
-settings = get_settings()
+settings, data_store, storage_manager, ai_provider = get_managers()
 
 # サイドバー
 with st.sidebar:
@@ -52,7 +60,7 @@ with col_refresh:
         st.rerun()
 
 # タブ
-tab1, tab2, tab3 = st.tabs(["LLM設定", "APIキー", "使用状況"])
+tab1, tab2, tab3, tab4 = st.tabs(["LLM設定", "APIキー", "メンバーAI", "使用状況"])
 
 # LLM設定タブ
 with tab1:
@@ -129,6 +137,7 @@ with tab1:
 
 # APIキータブ
 with tab2:
+    # ... (existing content is same)
     st.subheader("APIキー設定状態")
     st.caption("環境変数から読み込まれます")
     
@@ -169,8 +178,145 @@ with tab2:
     3. Streamlit Cloudの場合は「Secrets」に設定
     """)
 
-# 使用状況タブ
+# メンバーAIタブ
 with tab3:
+    st.subheader("メンバーAI設定")
+    st.caption("商品企画を独自の視点で評価するAIメンバーを管理します")
+
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["メンバー一覧", "AIかんたん作成", "手動登録"])
+
+    # 1. メンバー一覧
+    with sub_tab1:
+        members = data_store.get_employee_personas()
+        if not members:
+            st.info("登録済みのメンバーはいません")
+        else:
+            for member in members:
+                with st.expander(f"{member.get('name') or '無名'} ({member.get('demographic') or '未設定'})"):
+                    col_img, col_info = st.columns([1, 4])
+                    with col_img:
+                        avatar_url = member.get("avatar_url")
+                        if avatar_url:
+                            st.image(avatar_url, width=100)
+                        else:
+                            st.write("No Image")
+                    with col_info:
+                        st.markdown(f"**評価の重点:** {member.get('evaluation_perspective')}")
+                        st.markdown(f"**性格・口調:** {member.get('personality_traits')}")
+                        
+                        col_edit, col_del = st.columns(2)
+                        with col_del:
+                            if st.button(f"削除: {member.get('name')}", key=f"del_{member['id']}", type="secondary"):
+                                if data_store.delete_employee_persona(member['id']):
+                                    st.success(f"削除しました: {member.get('name')}")
+                                    st.rerun()
+
+    # 2. AIかんたん作成
+    with sub_tab2:
+        st.write("20問の簡単な質問に答えるだけで、AIが詳細なプロフィールを生成します")
+        questions = [
+            "新しいガジェットが好きだ", "商品の見た目より機能を重視する", "口コミを必ずチェックする",
+            "ブランド品には目がない", "価格が安ければ品質は二の次だ", "限定品という言葉に弱い",
+            "SNSで流行っているものを買う", "長く使えるものを好む", "衝動買いをよくする",
+            "エコや倫理的な配慮を重視する", "使いやすさ（UI）が重要だ", "サポートの充実が不可欠だ",
+            "コスパ最高なものを探すのが得意", "デザインが良ければ高くても買う", "新しいサービスはすぐ試す",
+            "自分だけのこだわりがある", "家族の意見を重視する", "機能はシンプルな方がいい",
+            "自分へのご褒美をよく買う", "投資だと思って高いものを買う"
+        ]
+        
+        survey_answers = []
+        for i, q in enumerate(questions):
+            ans = st.slider(f"Q{i+1}: {q}", 1, 6, 3, key=f"q_{i}")
+            survey_answers.append(f"{q}: {ans}")
+
+        member_name = st.text_input("メンバー名", "AIメンバーA", key="auto_name")
+        
+        if st.button("プロフィールを自動生成", type="primary"):
+            with st.spinner("AIがプロフィールを構築中..."):
+                survey_text = "\n".join(survey_answers)
+                prompt = f"""
+                以下の20問のアンケート結果（1:全く思わない〜6:強く思う）を元に、
+                商品企画を評価する「メンバーペルソナ」を詳細に作成してください。
+                回答者の特性を分析し、具体的で深みのある人物像にしてください。
+
+                【アンケート結果】
+                {survey_text}
+
+                以下の項目を日本語のJSON形式で出力してください：
+                - evaluation_perspective (評価の重点)
+                - personality_traits (性格・口調)
+                - pain_points (悩み・課題)
+                - info_literacy (情報リテラシー)
+                - purchase_trigger (購入の決め手)
+                - lifestyle (ライフスタイル)
+                - psychographic (価値観・関心)
+                - demographic (基本属性)
+                - buying_behavior (購買行動)
+                - ng_points (NGポイント)
+                """
+                try:
+                    import json
+                    res_text = ai_provider.generate_with_retry(prompt, task="atomize")
+                    # JSON抽出
+                    if "```json" in res_text:
+                        res_text = res_text.split("```json")[1].split("```")[0]
+                    persona_data = json.loads(res_text)
+                    persona_data["name"] = member_name
+                    
+                    added = data_store.add_employee_persona(persona_data)
+                    st.success(f"メンバー「{member_name}」を作成しました！")
+                    st.json(persona_data)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"生成エラー: {e}")
+
+    # 3. 手動登録
+    with sub_tab3:
+        with st.form("manual_member_form"):
+            name = st.text_input("名前（必須）")
+            eval_p = st.text_area("評価の重点")
+            traits = st.text_area("性格・口調")
+            pains = st.text_area("悩み・課題")
+            literacy = st.text_input("情報リテラシー")
+            trigger = st.text_input("購入の決め手")
+            life = st.text_area("ライフスタイル")
+            psycho = st.text_area("価値観・関心")
+            demo = st.text_input("基本属性")
+            behavior = st.text_area("購買行動")
+            ng = st.text_area("NGポイント")
+            
+            avatar_file = st.file_uploader("アバター画像", type=["jpg", "png", "jpeg"])
+            
+            submitted = st.form_submit_button("登録", type="primary")
+            if submitted:
+                if not name:
+                    st.error("名前は必須です")
+                else:
+                    avatar_url = ""
+                    if avatar_file:
+                        path = f"avatars/{uuid.uuid4()}_{avatar_file.name}"
+                        avatar_url = storage_manager.upload_file(avatar_file, path)
+                    
+                    new_member = {
+                        "name": name,
+                        "evaluation_perspective": eval_p,
+                        "personality_traits": traits,
+                        "pain_points": pains,
+                        "info_literacy": literacy,
+                        "purchase_trigger": trigger,
+                        "lifestyle": life,
+                        "psychographic": psycho,
+                        "demographic": demo,
+                        "buying_behavior": behavior,
+                        "ng_points": ng,
+                        "avatar_url": avatar_url
+                    }
+                    data_store.add_employee_persona(new_member)
+                    st.success(f"メンバー「{name}」を登録しました")
+                    st.rerun()
+
+# 使用状況タブ
+with tab4:
     st.subheader("使用状況")
     st.caption("※ 現在の実装ではトラッキングされていません")
     

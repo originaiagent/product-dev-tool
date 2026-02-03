@@ -262,3 +262,43 @@ class AIProvider:
     def switch_model(self, model: str) -> None:
         """モデルを切り替え"""
         self.settings.set_model(model)
+
+    def evaluate_by_employee(
+        self,
+        employee: Dict[str, Any],
+        product_content: str,
+        past_feedbacks: List[Dict[str, Any]] = None
+    ) -> str:
+        """メンバー視点での商品評価を生成"""
+        # プロンプト読み込み
+        prompt_path = Path(__file__).parent.parent / "data" / "prompts" / "employee_evaluation.txt"
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            template = f.read()
+
+        # 過去のフィードバックをテキスト化
+        past_feedback_text = ""
+        if past_feedbacks:
+            for i, fb in enumerate(past_feedbacks):
+                past_feedback_text += f"【前回までの修正指示 {i+1}】\n{fb.get('user_feedback', '')}\n"
+        else:
+            past_feedback_text = "なし"
+
+        # プロンプト埋め込み
+        prompt = template.format(
+            employee_name=employee.get("name") or "メンバー",
+            employee_evaluation_perspective=employee.get("evaluation_perspective") or "未設定",
+            employee_personality_traits=employee.get("personality_traits") or "未設定",
+            employee_pain_points=employee.get("pain_points") or "未設定",
+            employee_info_literacy=employee.get("info_literacy") or "未設定",
+            employee_purchase_trigger=employee.get("purchase_trigger") or "未設定",
+            employee_lifestyle=employee.get("lifestyle") or "未設定",
+            employee_psychographic=employee.get("psychographic") or "未設定",
+            employee_demographic=employee.get("demographic") or "未設定",
+            employee_buying_behavior=employee.get("buying_behavior") or "未設定",
+            employee_ng_points=employee.get("ng_points") or "未設定",
+            past_feedback=past_feedback_text,
+            product_content=product_content
+        )
+
+        # AIにリクエスト
+        return self.generate_with_retry(prompt=prompt, task="evaluation")
