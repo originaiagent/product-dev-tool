@@ -251,11 +251,15 @@ if competitors:
                 if text_info != comp.get("text_info", ""):
                     data_store.update("competitors", comp["id"], {"text_info": text_info})
                 
-                # AI抽出ボタン
+                # AI抽出ボタンエリア
                 col_extract, col_delete = st.columns([3, 1])
                 with col_extract:
-                    if st.button("🤖 情報を自動抽出", key=f"extract_{comp['id']}", use_container_width=True):
-                        with st.spinner("AI分析中..."):
+                    is_analyzed = comp.get("extracted_data", {}).get("target_audience") is not None
+                    btn_label = "🔄 AIで再分析する" if is_analyzed else "🔍 AI詳細分析を実行"
+                    btn_type = "secondary" if is_analyzed else "primary"
+                    
+                    if st.button(btn_label, key=f"extract_{comp['id']}", type=btn_type, use_container_width=True):
+                        with st.spinner("AIが徹底分析中...（画像の枚数によっては時間がかかります）"):
                             try:
                                 # プロンプト取得
                                 prompt = prompt_manager.load("extract")
@@ -269,17 +273,9 @@ if competitors:
                                 # 画像データがない場合、URLから取得を試みる
                                 if not images and image_urls:
                                     for url in image_urls[:5]: # 最大5枚
-                                        # URLからパスを抽出（簡易的）
-                                        # get_public_urlの結果からパスを逆算するのは難しい場合があるので、
-                                        # ファイル名がわかれば再構築するか、あるいはURLをそのまま扱えるようにするか。
-                                        # ここではStorageManagerにURLからダウンロードする機能がないため（パスが必要）、
-                                        # パスを推測するか、別途パスを保存しておくべきだった。
-                                        # しかし、upload時は `competitors/{comp['id']}/{filename}` としている。
-                                        # URL: .../object/public/product-dev-images/competitors/...
                                         try:
                                             # URLからパス部分を抽出
                                             path_part = url.split(f"/public/{storage_manager.BUCKET_NAME}/")[-1]
-                                            # URLデコード (スペース -> %20 などを戻す)
                                             path_part = unquote(path_part)
                                             img_bytes = storage_manager.get_file_bytes(path_part)
                                             if img_bytes:
@@ -289,7 +285,7 @@ if competitors:
                                         except Exception as e:
                                             print(f"Error fetching image from storage: {e}")
                                 
-                                # テキスト情報を結合（手動入力 + ファイルから抽出）
+                                # テキスト情報を結合
                                 combined_text = text_info
                                 extracted_text = comp.get("extracted_text", "")
                                 if extracted_text:
@@ -299,7 +295,7 @@ if competitors:
                                 response = ai_provider.generate_with_retry(
                                     prompt=f"{prompt}\n\n## テキスト情報\n{combined_text}",
                                     task="extract",
-                                    images=images[:5] if images else None  # 最大5枚
+                                    images=images[:5] if images else None
                                 )
                                 
                                 # JSONを抽出
@@ -313,7 +309,7 @@ if competitors:
                                         current_data = extracted
                                     
                                     data_store.update("competitors", comp["id"], {"extracted_data": current_data})
-                                    st.success("✅ 情報を抽出しました")
+                                    st.success("✅ AI分析が完了しました！")
                                     st.rerun()
                                 except ValueError:
                                     st.error("AI応答の解析に失敗しました")
@@ -330,26 +326,12 @@ if competitors:
                 extracted = comp.get("extracted_data", {})
                 if extracted:
                     st.markdown("---")
-                    ext_col1, ext_col2, ext_col3 = st.columns(3)
-                    with ext_col1:
-                        # st.caption("⭐ レビュー数")
-                        # st.write(f"{comp.get('reviews', 0):,}件")
-                        st.caption("💰 月間売上")
-                        if comp.get("sales"):
-                            st.write(f"¥{comp.get('sales', 0) // 10000:,}万")
-                        else:
-                            st.write("-")
-                    with ext_col2:
-                         st.caption("📦 月間販売数")
-                         if comp.get("units"):
-                            st.write(f"{comp.get('units', 0):,}個")
-                         else:
-                            st.write("-")
-                    with ext_col3:
-                        st.empty()
                     
-                    # 5指標のレーダーチャート的表示（簡易リスト）
-                    st.markdown("###### 📊 評価")
+                    # 分析済みステータス
+                    if extracted.get("target_audience"):
+                        st.caption("✅ 分析済み")
+
+                    # 5指標（再掲）
                     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
                     with m_col1:
                         st.metric("セラー強さ", extracted.get("seller_strength", "-"))
@@ -362,65 +344,97 @@ if competitors:
                     with m_col5:
                         st.metric("レビュー", extracted.get("review_power", "-"))
                     
-                    if extracted.get("features"):
-                        st.caption("✨ 特徴")
-                        st.write(", ".join(extracted.get("features", [])[:3]))
+                    # 詳細情報（追加分）
+                    if extracted.get("price"):
+                        st.markdown(f"**価格**: {extracted.get('price')}")
                     
-                    if extracted.get("negatives"):
-                        st.caption("😞 悪い点")
-                        st.write(", ".join(extracted.get("negatives", [])[:3]))
+                    col_spec1, col_spec2 = st.columns(2)
+                    with col_spec1:
+                        st.markdown("**主な特徴:**")
+                        for f in extracted.get("features", [])[:5]:
+                            st.write(f"- {f}")
+                        
+                        if extracted.get("target_audience"):
+                            st.markdown(f"**ターゲット層**: {extracted.get('target_audience')}")
+
+                    with col_spec2:
+                        st.markdown("**強み:**")
+                        for s in extracted.get("strengths", []):
+                            st.write(f"- {s}")
+                        
+                        st.markdown("**弱み:**")
+                        for w in extracted.get("weaknesses", []):
+                            st.write(f"- {w}")
                 
                 st.markdown("---")
     
     # ガチ比較表
+    # ガチ比較表
+    st.markdown("---")
     st.subheader("📊 ガチ比較表")
-    st.caption("※アップロード情報から自動抽出")
+    st.caption("全競合のAI分析結果をまとめて比較します")
     
-    # テーブル作成
-    if len(competitors) > 0:
-        # ヘッダー
-        header_cols = ["項目", "自社目標"] + [c.get("name", "競合") for c in competitors]
-        
-        # スペック項目を収集
-        all_specs = set()
-        for comp in competitors:
-            extracted = comp.get("extracted_data", {})
-            specs = extracted.get("specs", {})
-            all_specs.update(specs.keys())
-        
-        # テーブルデータ
-        table_data = []
-        
-        # URL行
-        url_row = ["URL", "-"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
-        
-        # 価格行
-        price_row = ["価格", "-"]
-        for comp in competitors:
-            extracted = comp.get("extracted_data", {})
-            price_row.append(extracted.get("price", "-"))
-        
-        # スペック行
-        spec_rows = []
-        for spec_key in ["weight", "size", "power"]:
-            row = [spec_key.replace("weight", "重量").replace("size", "サイズ").replace("power", "電源"), "-"]
+    if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
+        if len(competitors) > 0:
+            # ヘッダー
+            header_cols = ["項目", "自社目標"] + [c.get("name", "競合") for c in competitors]
+            
+            # テーブルデータ
+            table_data = []
+            
+            # URL行
+            url_row = ["URL", "-"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
+            
+            # 価格行
+            price_row = ["価格", "-"]
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                specs = extracted.get("specs", {})
-                row.append(specs.get(spec_key, "-"))
-            spec_rows.append(row)
-        
-        # Markdown テーブル作成
-        all_rows = [price_row] + spec_rows
-        
-        # ヘッダー
-        md_table = "| " + " | ".join(header_cols) + " |\n"
-        md_table += "| " + " | ".join(["---"] * len(header_cols)) + " |\n"
-        
-        for row in all_rows:
-            md_table += "| " + " | ".join(str(cell) for cell in row) + " |\n"
-        
-        st.markdown(md_table)
+                price_row.append(extracted.get("price", "-"))
+            
+            # スペック行
+            spec_rows = []
+            for spec_key in ["weight", "size", "power"]:
+                label = spec_key.replace("weight", "重量").replace("size", "サイズ").replace("power", "電源")
+                row = [label, "-"]
+                for comp in competitors:
+                    extracted = comp.get("extracted_data", {})
+                    specs = extracted.get("specs", {})
+                    row.append(specs.get(spec_key, "-"))
+                spec_rows.append(row)
+            
+            # 特徴、強み、弱み
+            feature_row = ["主な特徴", "-"]
+            strength_row = ["強み", "-"]
+            weakness_row = ["弱み", "-"]
+            
+            for comp in competitors:
+                extracted = comp.get("extracted_data", {})
+                
+                # 特徴
+                features = extracted.get("features", [])
+                feature_row.append("<br>".join(features[:5]) if features else "-")
+                
+                # 強み
+                strengths = extracted.get("strengths", [])
+                strength_row.append("<br>".join(strengths) if strengths else "-")
+                
+                # 弱み
+                weaknesses = extracted.get("weaknesses", [])
+                weakness_row.append("<br>".join(weaknesses) if weaknesses else "-")
+            
+            # Markdown テーブル作成
+            all_rows = [price_row] + spec_rows + [feature_row, strength_row, weakness_row]
+            
+            md_table = "| " + " | ".join(header_cols) + " |\n"
+            md_table += "| " + " | ".join(["---"] * len(header_cols)) + " |\n"
+            md_table += "| " + " | ".join(url_row) + " |\n" # URL行を追加
+            
+            for row in all_rows:
+                md_table += "| " + " | ".join(str(cell).replace("\n", "<br>") for cell in row) + " |\n"
+            
+            st.markdown(md_table, unsafe_allow_html=True)
+        else:
+            st.warning("競合データがありません")
     
     # 次へボタン
     st.markdown("---")
