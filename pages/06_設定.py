@@ -72,6 +72,10 @@ with tab1:
     
     # === デバッグ情報 ===
     with st.expander("🔧 デバッグ情報", expanded=True):
+        st.write("**SettingsManager の状態:**")
+        st.write(f"- settings.data_store: {settings.data_store}")
+        st.write(f"- settings.data_store.supabase: {settings.data_store.supabase if settings.data_store else 'N/A'}")
+
         st.write("**現在のメモリ内設定:**")
         st.json(settings._settings)
         
