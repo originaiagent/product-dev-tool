@@ -444,20 +444,23 @@ if competitors:
     st.subheader("📊 ガチ比較表")
     st.caption("全競合のAI分析結果をまとめて比較します")
     
+    # session_stateで結果を保持
+    if "comparison_table" not in st.session_state:
+        st.session_state.comparison_table = None
+    
     if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
         if len(competitors) > 0:
             # 全競合のキーを収集
             all_spec_keys = set()
             all_var_keys = set()
-            all_info_keys = set()
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
                 all_spec_keys.update(extracted.get("specs", {}).keys())
                 all_var_keys.update(extracted.get("variations", {}).keys())
-                all_info_keys.update(extracted.get("product_info", {}).keys())
             
             # ヘッダー
             header_cols = ["比較項目"] + [c.get("name", "競合") for c in competitors]
+            num_competitors = len(competitors)
             
             # テーブルデータを構築
             rows = []
@@ -466,69 +469,67 @@ if competitors:
             url_row = ["商品URL"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
             rows.append(url_row)
             
-            # product_info行（動的）
-            for key in sorted(all_info_keys):
-                info_row = [key]
-                for comp in competitors:
-                    extracted = comp.get("extracted_data", {})
-                    val = extracted.get("product_info", {}).get(key, "-")
-                    info_row.append(val if val else "-")
-                rows.append(info_row)
+            # 価格行
+            price_row = ["価格"]
+            for comp in competitors:
+                extracted = comp.get("extracted_data", {})
+                p = extracted.get("product_info", {}).get("価格") or extracted.get("specs", {}).get("価格") or "-"
+                price_row.append(p if p else "-")
+            rows.append(price_row)
             
-            # specs行（動的）
+            # specs行（動的、-が多い行は除外）
             for key in sorted(all_spec_keys):
+                if key == "価格":
+                    continue
                 spec_row = [key]
+                dash_count = 0
                 for comp in competitors:
                     extracted = comp.get("extracted_data", {})
                     val = extracted.get("specs", {}).get(key, "-")
-                    spec_row.append(val if val else "-")
-                rows.append(spec_row)
+                    if not val or val == "-":
+                        dash_count += 1
+                        spec_row.append("-")
+                    else:
+                        spec_row.append(val)
+                # 半分以上が「-」なら行を追加しない
+                if dash_count <= num_competitors / 2:
+                    rows.append(spec_row)
             
-            # variations行（動的）
+            # variations行（動的、-が多い行は除外）
             for key in sorted(all_var_keys):
                 var_row = [key]
+                dash_count = 0
                 for comp in competitors:
                     extracted = comp.get("extracted_data", {})
                     vals = extracted.get("variations", {}).get(key, [])
-                    var_row.append(", ".join(vals) if vals else "-")
-                rows.append(var_row)
-            
-            # 付属品行
-            acc_row = ["付属品"]
-            has_accessories = False
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                acc = extracted.get("accessories", [])
-                if acc:
-                    has_accessories = True
-                acc_row.append(", ".join(acc) if acc else "-")
-            if has_accessories:
-                rows.append(acc_row)
+                    if vals:
+                        var_row.append(", ".join(vals[:5]) + ("..." if len(vals) > 5 else ""))
+                    else:
+                        dash_count += 1
+                        var_row.append("-")
+                if dash_count <= num_competitors / 2:
+                    rows.append(var_row)
             
             # USP行
-            usp_row = ["USP（独自の強み）"]
+            usp_row = ["USP"]
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                usp_row.append(extracted.get("usp") or "-")
+                usp = extracted.get("usp") or "-"
+                # 長すぎる場合は省略
+                if len(usp) > 50:
+                    usp = usp[:50] + "..."
+                usp_row.append(usp)
             rows.append(usp_row)
             
             # ターゲット行
-            target_row = ["ターゲット層"]
+            target_row = ["ターゲット"]
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                target_row.append(extracted.get("target_audience") or "-")
+                target = extracted.get("target_audience") or "-"
+                if len(target) > 30:
+                    target = target[:30] + "..."
+                target_row.append(target)
             rows.append(target_row)
-            
-            # 特徴行（箇条書き、最大10個）
-            feature_row = ["主な特徴"]
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                features = extracted.get("features", [])
-                if features:
-                    feature_row.append("・" + "・".join(features[:10]))
-                else:
-                    feature_row.append("-")
-            rows.append(feature_row)
             
             # Markdown テーブル作成
             md_table = "| " + " | ".join(header_cols) + " |\n"
@@ -537,9 +538,18 @@ if competitors:
                 cells = [str(cell).replace("\n", " ").replace("|", "｜") for cell in row]
                 md_table += "| " + " | ".join(cells) + " |\n"
             
-            st.markdown(md_table, unsafe_allow_html=True)
+            st.session_state.comparison_table = md_table
         else:
             st.warning("競合データがありません")
+    
+    # 保存された比較表を表示
+    if st.session_state.comparison_table:
+        st.markdown(st.session_state.comparison_table, unsafe_allow_html=True)
+        
+        # クリアボタン
+        if st.button("🗑️ 比較表をクリア", type="secondary"):
+            st.session_state.comparison_table = None
+            st.rerun()
     
     # 次へボタン
     st.markdown("---")
