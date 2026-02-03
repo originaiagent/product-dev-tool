@@ -450,114 +450,112 @@ if competitors:
     # ガチ比較表
     st.markdown("---")
     st.subheader("📊 ガチ比較表")
-    st.caption("全競合のAI分析結果をまとめて比較します")
-
+    st.caption("AIが全競合を分析し、差別化ポイントを特定します")
     
-    if st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True):
+    # 保存済みの比較表を読み込み
+    if "comparison_result" not in st.session_state:
+        saved = data_store.get_comparison_table(project_id)
+        if saved:
+            try:
+                st.session_state.comparison_result = json.loads(saved)
+            except:
+                st.session_state.comparison_result = None
+        else:
+            st.session_state.comparison_result = None
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        generate_btn = st.button("📊 ガチ比較表を生成", type="primary", use_container_width=True)
+    with col2:
+        clear_btn = st.button("🗑️ クリア")
+    
+    if clear_btn:
+        st.session_state.comparison_result = None
+        data_store.save_comparison_table(project_id, None)
+        st.rerun()
+    
+    if generate_btn:
         if len(competitors) > 0:
-            # 全競合のキーを収集
-            all_spec_keys = set()
-            all_var_keys = set()
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                all_spec_keys.update(extracted.get("specs", {}).keys())
-                all_var_keys.update(extracted.get("variations", {}).keys())
-            
-            # ヘッダー
-            header_cols = ["比較項目"] + [c.get("name", "競合") for c in competitors]
-            num_competitors = len(competitors)
-            
-            # テーブルデータを構築
-            rows = []
-            
-            # URL行
-            url_row = ["商品URL"] + [f"[🔗]({c.get('url', '#')})" if c.get('url') else "-" for c in competitors]
-            rows.append(url_row)
-            
-            # 価格行
-            price_row = ["価格"]
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                p = extracted.get("product_info", {}).get("価格") or extracted.get("specs", {}).get("価格") or "-"
-                price_row.append(p if p else "-")
-            rows.append(price_row)
-            
-            # specs行（動的、-が多い行は除外）
-            for key in sorted(all_spec_keys):
-                if key == "価格":
-                    continue
-                spec_row = [key]
-                dash_count = 0
-                for comp in competitors:
-                    extracted = comp.get("extracted_data", {})
-                    val = extracted.get("specs", {}).get(key, "-")
-                    if not val or val == "-":
-                        dash_count += 1
-                        spec_row.append("-")
-                    else:
-                        spec_row.append(val)
-                # 半分以上が「-」なら行を追加しない
-                if dash_count <= num_competitors / 2:
-                    rows.append(spec_row)
-            
-            # variations行（動的、-が多い行は除外）
-            for key in sorted(all_var_keys):
-                var_row = [key]
-                dash_count = 0
-                for comp in competitors:
-                    extracted = comp.get("extracted_data", {})
-                    vals = extracted.get("variations", {}).get(key, [])
-                    if vals:
-                        var_row.append(", ".join(vals[:5]) + ("..." if len(vals) > 5 else ""))
-                    else:
-                        dash_count += 1
-                        var_row.append("-")
-                if dash_count <= num_competitors / 2:
-                    rows.append(var_row)
-            
-            # USP行
-            usp_row = ["USP"]
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                usp = extracted.get("usp") or "-"
-                # 長すぎる場合は省略
-                if len(usp) > 50:
-                    usp = usp[:50] + "..."
-                usp_row.append(usp)
-            rows.append(usp_row)
-            
-            # ターゲット行
-            target_row = ["ターゲット"]
-            for comp in competitors:
-                extracted = comp.get("extracted_data", {})
-                target = extracted.get("target_audience") or "-"
-                if len(target) > 30:
-                    target = target[:30] + "..."
-                target_row.append(target)
-            rows.append(target_row)
-            
-            # Markdown テーブル作成
-            md_table = "| " + " | ".join(header_cols) + " |\n"
-            md_table += "| " + " | ".join(["---"] * len(header_cols)) + " |\n"
-            for row in rows:
-                cells = [str(cell).replace("\n", " ").replace("|", "｜") for cell in row]
-                md_table += "| " + " | ".join(cells) + " |\n"
-            
-            # session_stateとSupabaseに保存
-            st.session_state.comparison_table = md_table
-            data_store.save_comparison_table(project_id, md_table)
+            # 分析済みの競合のみ抽出
+            analyzed = [c for c in competitors if c.get("extracted_data")]
+            if not analyzed:
+                st.warning("AI分析済みの競合がありません。各競合の「AI分析」を先に実行してください。")
+            else:
+                with st.spinner("AIが比較分析中..."):
+                    # プロンプト読み込み
+                    prompt_path = Path(__file__).parent.parent / "data" / "prompts" / "compare.md"
+                    compare_prompt = prompt_path.read_text(encoding="utf-8")
+                    
+                    # 競合データを整形
+                    competitor_data = {}
+                    for c in analyzed:
+                        competitor_data[c["name"]] = c["extracted_data"]
+                    
+                    # AIに送信
+                    full_prompt = f"{compare_prompt}\n\n## 競合データ\n```json\n{json.dumps(competitor_data, ensure_ascii=False, indent=2)}\n```"
+                    
+                    response = ai_provider.generate(full_prompt)
+                    
+                    # JSONパース
+                    try:
+                        # コードブロックを除去
+                        json_str = response
+                        if "```json" in json_str:
+                            json_str = json_str.split("```json")[1].split("```")[0]
+                        elif "```" in json_str:
+                            json_str = json_str.split("```")[1].split("```")[0]
+                        
+                        result = json.loads(json_str.strip())
+                        st.session_state.comparison_result = result
+                        
+                        # Supabaseに保存
+                        data_store.save_comparison_table(project_id, json.dumps(result, ensure_ascii=False))
+                        st.success("比較分析が完了しました")
+                    except Exception as e:
+                        st.error(f"AI応答のパースに失敗: {e}")
+                        st.code(response)
         else:
             st.warning("競合データがありません")
     
-    # 保存された比較表を表示
-    if st.session_state.comparison_table:
-        st.markdown(st.session_state.comparison_table, unsafe_allow_html=True)
+    # 結果表示
+    if st.session_state.comparison_result:
+        result = st.session_state.comparison_result
         
-        # クリアボタン
-        if st.button("🗑️ 比較表をクリア", type="secondary"):
-            st.session_state.comparison_table = None
-            data_store.save_comparison_table(project_id, None) # Supabaseからも削除
-            st.rerun()
+        # 比較表
+        if "comparison_table" in result:
+            table_data = result["comparison_table"]
+            if table_data:
+                # ヘッダー取得
+                first_item = table_data[0]
+                competitor_names = list(first_item["values"].keys())
+                header = ["比較項目"] + competitor_names
+                
+                # Markdown表作成
+                md = "| " + " | ".join(header) + " |\n"
+                md += "| " + " | ".join(["---"] * len(header)) + " |\n"
+                for item in table_data:
+                    row = [item["項目"]] + [str(item["values"].get(name, "-")) for name in competitor_names]
+                    md += "| " + " | ".join(row) + " |\n"
+                
+                st.markdown(md)
+        
+        # 各競合の強み
+        if "strengths" in result and result["strengths"]:
+            st.markdown("### 💪 各競合の強み")
+            for name, strength in result["strengths"].items():
+                st.markdown(f"- **{name}**: {strength}")
+        
+        # 市場のギャップ
+        if "gaps" in result and result["gaps"]:
+            st.markdown("### 🕳️ 市場のギャップ")
+            for gap in result["gaps"]:
+                st.markdown(f"- {gap}")
+        
+        # 差別化機会
+        if "differentiation_opportunities" in result and result["differentiation_opportunities"]:
+            st.markdown("### 🎯 差別化の機会")
+            for opp in result["differentiation_opportunities"]:
+                st.markdown(f"- {opp}")
     
     # 次へボタン
     st.markdown("---")
