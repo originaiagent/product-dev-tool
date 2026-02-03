@@ -19,7 +19,6 @@ class DataStore:
         "reviews": "review_analysis",
         "ideas": "differentiation_ideas",
         "employee_personas": "employee_personas",
-        "employee_personas": "employee_personas",
         "employee_feedback": "employee_feedback",
         "settings": "settings"
         # "positioning" は未使用のため除外
@@ -371,4 +370,31 @@ class DataStore:
                 return response.data[0]["comparison_table"]
         except Exception as e:
             print(f"Get comparison table error: {e}")
+        return None
+
+    def save_review_analysis(self, project_id: str, data: dict) -> bool:
+        """レビュー分析結果を保存"""
+        if not self.supabase:
+            return False
+        try:
+            import json
+            self.supabase.table("projects").update({
+                "review_analysis": json.dumps(data, ensure_ascii=False)
+            }).eq("id", project_id).execute()
+            return True
+        except Exception as e:
+            print(f"Save review analysis error: {e}")
+            return False
+
+    def get_review_analysis(self, project_id: str) -> Optional[dict]:
+        """レビュー分析結果を取得"""
+        if not self.supabase:
+            return None
+        try:
+            import json
+            response = self.supabase.table("projects").select("review_analysis").eq("id", project_id).execute()
+            if response.data and response.data[0].get("review_analysis"):
+                return json.loads(response.data[0]["review_analysis"])
+        except Exception as e:
+            print(f"Get review analysis error: {e}")
         return None
