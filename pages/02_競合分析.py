@@ -254,7 +254,14 @@ if competitors:
                 # AI抽出ボタンエリア
                 col_extract, col_delete = st.columns([3, 1])
                 with col_extract:
-                    is_analyzed = comp.get("extracted_data", {}).get("target_audience") is not None
+                    # target_audienceがanalysis内にあるかチェック
+                    extracted = comp.get("extracted_data", {})
+                    is_analyzed = False
+                    if "analysis" in extracted:
+                         is_analyzed = extracted["analysis"].get("target_audience") is not None
+                    elif extracted.get("target_audience"): # 互換性のため
+                         is_analyzed = True
+                         
                     btn_label = "🔄 AIで再分析する" if is_analyzed else "🔍 AI詳細分析を実行"
                     btn_type = "secondary" if is_analyzed else "primary"
                     
@@ -328,10 +335,12 @@ if competitors:
                     st.markdown("---")
                     
                     # 分析済みステータス
-                    if extracted.get("target_audience"):
-                        st.caption("✅ 分析済み")
+                    if "analysis" in extracted:
+                        st.caption("✅ 詳細分析済み")
+                    else:
+                        st.caption("⚠️ 未分析または旧形式データ")
 
-                    # 5指標（再掲）
+                    # 5指標（再掲） - これはフラットなレベルで保存されていると仮定
                     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
                     with m_col1:
                         st.metric("セラー強さ", extracted.get("seller_strength", "-"))
@@ -344,27 +353,96 @@ if competitors:
                     with m_col5:
                         st.metric("レビュー", extracted.get("review_power", "-"))
                     
-                    # 詳細情報（追加分）
-                    if extracted.get("price"):
-                        st.markdown(f"**価格**: {extracted.get('price')}")
-                    
-                    col_spec1, col_spec2 = st.columns(2)
-                    with col_spec1:
-                        st.markdown("**主な特徴:**")
-                        for f in extracted.get("features", [])[:5]:
-                            st.write(f"- {f}")
+                    if "basic" in extracted:
+                        # タブ形式で詳細を表示
+                        det_tab1, det_tab2, det_tab3, det_tab4 = st.tabs(["基本・スペック", "素材・構成", "セット・保証", "分析深掘り"])
                         
-                        if extracted.get("target_audience"):
-                            st.markdown(f"**ターゲット層**: {extracted.get('target_audience')}")
-
-                    with col_spec2:
-                        st.markdown("**強み:**")
-                        for s in extracted.get("strengths", []):
-                            st.write(f"- {s}")
+                        with det_tab1:
+                            col_b1, col_b2 = st.columns(2)
+                            with col_b1:
+                                b = extracted.get("basic", {})
+                                st.markdown(f"**ブランド**: {b.get('brand', '-')}")
+                                st.markdown(f"**価格**: {b.get('price', '-')}")
+                                st.markdown(f"**型番**: {b.get('model', '-')}")
+                                st.markdown(f"**製造国**: {b.get('made_in', '-')}")
+                            with col_b2:
+                                d = extracted.get("dimensions", {})
+                                st.markdown(f"**サイズ**: {d.get('size', '-')}")
+                                st.markdown(f"**重量**: {d.get('weight', '-')}")
+                            
+                            st.markdown("---")
+                            st.markdown("**性能・スペック:**")
+                            s = extracted.get("specs", {})
+                            scol1, scol2 = st.columns(2)
+                            with scol1:
+                                st.write(f"- 電源: {s.get('power', '-')}")
+                                st.write(f"- バッテリー: {s.get('battery', '-')}")
+                                st.write(f"- 防水: {s.get('waterproof', '-')}")
+                            with scol2:
+                                st.write(f"- 耐久性: {s.get('durability', '-')}")
+                                st.write(f"- 騒音: {s.get('noise_level', '-')}")
                         
-                        st.markdown("**弱み:**")
-                        for w in extracted.get("weaknesses", []):
-                            st.write(f"- {w}")
+                        with det_tab2:
+                            m = extracted.get("materials", {})
+                            st.markdown(f"**主素材**: {m.get('main_material', '-')}")
+                            st.markdown(f"**副素材**: {m.get('sub_materials', '-')}")
+                            st.markdown(f"**表面加工**: {m.get('surface', '-')}")
+                            st.markdown(f"**構造**: {m.get('structure', '-')}")
+                        
+                        with det_tab3:
+                            col_p1, col_p2 = st.columns(2)
+                            with col_p1:
+                                p = extracted.get("package", {})
+                                st.markdown("**付属品:**")
+                                for acc in p.get("accessories", []):
+                                    st.write(f"- {acc}")
+                                st.markdown(f"**セット数**: {p.get('quantity', '-')}")
+                            with col_p2:
+                                sup = extracted.get("support", {})
+                                st.markdown(f"**保証**: {sup.get('warranty', '-')}")
+                                st.markdown(f"**サポート**: {sup.get('support', '-')}")
+                        
+                        with det_tab4:
+                            a = extracted.get("analysis", {})
+                            st.markdown(f"**USP (独自の売り)**: {a.get('usp', '-')}")
+                            st.markdown(f"**ターゲット層**: {a.get('target_audience', '-')}")
+                            
+                            col_a1, col_a2 = st.columns(2)
+                            with col_a1:
+                                st.markdown("**強み:**")
+                                for val in a.get("strengths", []):
+                                    st.write(f"- {val}")
+                            with col_a2:
+                                st.markdown("**弱み:**")
+                                for val in a.get("weaknesses", []):
+                                    st.write(f"- {val}")
+                            
+                            st.markdown("**特徴一覧:**")
+                            st.write(", ".join(a.get("features", [])))
+                    else:
+                        # 下位互換表示 (古いデータ)
+                         if extracted.get("price"):
+                            st.markdown(f"**価格**: {extracted.get('price')}")
+                        
+                         col_spec1, col_spec2 = st.columns(2)
+                         with col_spec1:
+                            st.markdown("**主な特徴:**")
+                            for f in extracted.get("features", [])[:5]:
+                                st.write(f"- {f}")
+                            
+                            if extracted.get("target_audience"):
+                                st.markdown(f"**ターゲット層**: {extracted.get('target_audience')}")
+    
+                         with col_spec2:
+                            st.markdown("**強み:**")
+                            for s in extracted.get("strengths", []):
+                                st.write(f"- {s}")
+                            
+                            st.markdown("**弱み:**")
+                            # negatives または weaknesses
+                            ws = extracted.get("weaknesses", []) or extracted.get("negatives", [])
+                            for w in ws:
+                                st.write(f"- {w}")
                 
                 st.markdown("---")
     
@@ -389,7 +467,8 @@ if competitors:
             price_row = ["価格", "-"]
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
-                price_row.append(extracted.get("price", "-"))
+                p = extracted.get("basic", {}).get("price") if "basic" in extracted else extracted.get("price")
+                price_row.append(p or "-")
             
             # スペック行
             spec_rows = []
@@ -398,8 +477,13 @@ if competitors:
                 row = [label, "-"]
                 for comp in competitors:
                     extracted = comp.get("extracted_data", {})
-                    specs = extracted.get("specs", {})
-                    row.append(specs.get(spec_key, "-"))
+                    # 新形式
+                    if "dimensions" in extracted or "specs" in extracted:
+                        val = extracted.get("dimensions", {}).get(spec_key) or extracted.get("specs", {}).get(spec_key)
+                    else:
+                        # 旧形式
+                        val = extracted.get("specs", {}).get(spec_key) or extracted.get(spec_key)
+                    row.append(val or "-")
                 spec_rows.append(row)
             
             # 特徴、強み、弱み
@@ -410,16 +494,19 @@ if competitors:
             for comp in competitors:
                 extracted = comp.get("extracted_data", {})
                 
+                # 新旧両対応
+                ana = extracted.get("analysis", {}) if "analysis" in extracted else extracted
+                
                 # 特徴
-                features = extracted.get("features", [])
+                features = ana.get("features", [])
                 feature_row.append("<br>".join(features[:5]) if features else "-")
                 
                 # 強み
-                strengths = extracted.get("strengths", [])
+                strengths = ana.get("strengths", [])
                 strength_row.append("<br>".join(strengths) if strengths else "-")
                 
                 # 弱み
-                weaknesses = extracted.get("weaknesses", [])
+                weaknesses = ana.get("weaknesses", []) or ana.get("negatives", [])
                 weakness_row.append("<br>".join(weaknesses) if weaknesses else "-")
             
             # Markdown テーブル作成
