@@ -251,11 +251,11 @@ with col_gen:
                 # JSON抽出
                 try:
                     ideas_data = parse_json_response(response)
-                except ValueError:
-                    st.error("AI応答の解析に失敗しました")
-                    # デバッグ用
-                    # st.text(response)
-                    ideas_data = {"ideas": []}
+                except Exception as e:
+                    st.error(f"AI応答の解析に失敗しました: {e}")
+                    st.markdown("### 生のAI応答")
+                    st.code(response)
+                    st.stop()
                 
                 ideas = ideas_data.get("ideas", [])
                 
@@ -273,7 +273,11 @@ with col_gen:
                 st.rerun()
                 
             except Exception as e:
-                st.error(f"エラー: {str(e)}")
+                import traceback
+                st.error(f"エラーが発生しました: {str(e)}")
+                st.markdown("### エラー詳細")
+                st.code(traceback.format_exc())
+                st.stop()
 
 st.markdown("---")
 
