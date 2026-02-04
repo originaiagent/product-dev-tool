@@ -247,10 +247,14 @@ with col_gen:
                     prompt=diff_prompt,
                     task="differentiate"
                 )
+                st.write("デバッグ: AI応答の長さ:", len(response))
+                st.write("デバッグ: AI応答の先頭200文字:", response[:200])
                 
                 # JSON抽出
                 try:
                     ideas_data = parse_json_response(response)
+                    st.write("デバッグ: パース成功")
+                    st.write("デバッグ: ideas数:", len(ideas_data.get("ideas", [])))
                 except Exception as e:
                     st.error(f"AI応答の解析に失敗しました: {e}")
                     st.markdown("### 生のAI応答")
@@ -258,19 +262,21 @@ with col_gen:
                     st.stop()
                 
                 ideas = ideas_data.get("ideas", [])
+                st.write("デバッグ: 保存するideas数:", len(ideas))
                 
                 # 既存削除→新規作成
                 existing = data_store.list_by_parent("ideas", project_id)
                 for ex in existing:
                     data_store.delete("ideas", ex["id"])
                 
-                for idea in ideas:
+                for i, idea in enumerate(ideas):
                     idea["project_id"] = project_id
                     idea["selected"] = False
-                    data_store.create("ideas", idea)
+                    result = data_store.create("ideas", idea)
+                    st.write(f"デバッグ: idea {i+1} 保存結果:", result)
                 
                 st.success(f"✅ {len(ideas)}件の差別化案を生成しました")
-                st.rerun()
+                # st.rerun()
                 
             except Exception as e:
                 import traceback
