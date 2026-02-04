@@ -60,11 +60,13 @@ class DataStore:
     def create(self, data_type: str, data: Dict) -> Dict:
         """新規作成"""
         if not self.supabase:
-            return data
+            print(f"Error: Supabase client is not initialized. Cannot create {data_type}.")
+            return None # 明示的に失敗を返す
 
         table = self._get_table_name(data_type)
         if not table:
-            return data
+            print(f"Error: No table mapping found for {data_type}.")
+            return None
         
         # UUID付与 (Python側で生成して渡す)
         if "id" not in data:
@@ -77,13 +79,20 @@ class DataStore:
         data["updated_at"] = now
         
         try:
+            print(f"DEBUG: Inserting into {table}: {data['id']}")
             response = self.supabase.table(table).insert(data).execute()
             if response.data:
+                print(f"DEBUG: Successfully inserted {len(response.data)} rows.")
                 return response.data[0]
+            else:
+                print("DEBUG: Insert executed but returned no data.")
         except Exception as e:
             print(f"Supabase Create Error ({table}): {e}")
+            import traceback
+            print(traceback.format_exc())
+            return None # エラー時はNoneを返す
         
-        return data
+        return None # データが返らなかった場合
     
     def get(self, data_type: str, id: str) -> Optional[Dict]:
         """IDでデータを取得"""
