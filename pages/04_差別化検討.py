@@ -199,9 +199,9 @@ st.markdown("---")
 # フィルター・ソート
 col_filter1, col_filter2, col_sort = st.columns([2, 2, 2])
 with col_filter1:
-    pattern_filter = st.selectbox(
-        "パターン",
-        ["全パターン", "性能UP", "機能追加", "合体", "コスト削減"],
+    category_filter = st.selectbox(
+        "カテゴリ",
+        ["全カテゴリ", "A (破壊的)", "B (差別化)", "C (改善)"],
         label_visibility="collapsed"
     )
 with col_filter2:
@@ -284,9 +284,16 @@ st.markdown("---")
 # 差別化案一覧
 ideas = data_store.list_by_parent("ideas", project_id)
 
+# デバッグ: 取得した差別化案を確認
+st.write(f"デバッグ: {len(ideas)}件の差別化案を取得")
+if ideas:
+    with st.expander("デバッグ: 最初のアイデアの生データ"):
+        st.write(ideas[0])
+
 # フィルタリング
-if pattern_filter != "全パターン":
-    ideas = [i for i in ideas if i.get("pattern") == pattern_filter]
+if category_filter != "全カテゴリ":
+    selected_cat = category_filter.split(" ")[0]
+    ideas = [i for i in ideas if i.get("category") == selected_cat]
 if difficulty_filter != "全難易度":
     ideas = [i for i in ideas if i.get("difficulty") == difficulty_filter]
 
@@ -318,29 +325,49 @@ if ideas:
             diff_colors = {"低": "#22c55e", "中": "#eab308", "高": "#ef4444"}
             diff_color = diff_colors.get(idea.get("difficulty", "中"), "#64748b")
             
+            # カテゴリカラー
+            cat_colors = {"A": "#ef4444", "B": "#3b82f6", "C": "#10b981"}
+            cat_color = cat_colors.get(idea.get("category"), "#64748b")
+            cat_name = {"A": "破壊的", "B": "差別化", "C": "改善"}.get(idea.get("category"), "-")
+
             with st.container():
                 st.markdown(f"""
                 <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem;">
                     <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
                         <div style="flex: 1;">
-                            <h4 style="margin: 0 0 0.5rem 0; font-size: 0.875rem;">{idea.get('title', '無題')}</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                <h4 style="margin: 0; font-size: 0.875rem;">{idea.get('title', '無題')}</h4>
+                                <span style="background: {cat_color}20; color: {cat_color}; padding: 0.125rem 0.4rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">
+                                    {idea.get('category', '')}: {cat_name}
+                                </span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: #1e293b; margin: 0 0 0.5rem 0; font-weight: 500;">
+                                {idea.get('concept', '')}
+                            </p>
                             <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem;">
-                                <span style="background: #dbeafe; color: #1e40af; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                                <span style="background: #f1f5f9; color: #475569; padding: 0.125rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">
                                     {idea.get('pattern', '')}
                                 </span>
-                                <span style="background: {diff_color}20; color: {diff_color}; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                                <span style="background: {diff_color}20; color: {diff_color}; padding: 0.125rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">
                                     {idea.get('difficulty', '')}
                                 </span>
-                                <span style="background: #1e293b; color: white; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                                <span style="background: #1e293b; color: white; padding: 0.125rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">
                                     {idea.get('effectiveness', 0)}
                                 </span>
                             </div>
-                            <p style="font-size: 0.75rem; color: #64748b; margin: 0 0 0.25rem 0;">
-                                {'📊' if idea.get('eff_type') == 'manifest' else '🔮'} {', '.join(idea.get('eff_reasons', [])[:2])}
+                            <p style="font-size: 0.7rem; color: #64748b; margin: 0 0 0.25rem 0;">
+                                {'📊' if idea.get('eff_type') in ['manifest', '顕在'] else '🔮'} {', '.join(idea.get('eff_reasons', [])[:2])}
                             </p>
-                            <p style="font-size: 0.75rem; color: #64748b; margin: 0;">
-                                💴 {idea.get('cost', '-')} ⏱ {idea.get('time', '-')}
-                            </p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                <p style="font-size: 0.7rem; color: #475569; margin: 0;">
+                                    💴 {idea.get('cost', '-')}
+                                </p>
+                                <p style="font-size: 0.7rem; color: #475569; margin: 0;">
+                                    ⏱ {idea.get('time', '-')}
+                                </p>
+                            </div>
+                            {f'<p style="font-size: 0.65rem; color: #ef4444; margin: 0.25rem 0 0 0; background: #fee2e2; padding: 0.125rem 0.4rem; border-radius: 4px;">⚠️ {idea.get("risk")}</p>' if idea.get("risk") else ""}
+                            {f'<p style="font-size: 0.65rem; color: #3b82f6; margin: 0.25rem 0 0 0;">💡 参考: {idea.get("reference")}</p>' if idea.get("reference") else ""}
                         </div>
                     </div>
                 </div>
