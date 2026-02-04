@@ -182,7 +182,6 @@ if competitors:
                 if uploaded_files:
                     # ファイルを処理
                     processed_files = []
-                    images_b64 = []
                     all_text = []
                     
                     for file in uploaded_files[:30]:
@@ -191,10 +190,6 @@ if competitors:
                         
                         # 画像の場合はStorageにアップロード
                         if result.get("type") == "image":
-                            # base64があればプレビュー用に保持（UI応答性のため）
-                            if result.get("base64"):
-                                images_b64.append(result["base64"])
-                            
                             # Supabase Storageへアップロード
                             path = f"competitors/{comp['id']}/{file.name}"
                             # fileはStreamlitのUploadedFileなのでそのまま渡せる
@@ -213,7 +208,7 @@ if competitors:
                     
                     # データを更新
                     update_data = {
-                        "images": images_b64,  # 後方互換性と即時表示用（将来的に廃止可）
+                        "images": [], # Base64データは保存せず Storage URLのみにする
                         "image_urls": comp.get("image_urls", [])
                     }
                     if all_text:
@@ -282,7 +277,6 @@ if competitors:
                                             path_part = unquote(path_part)
                                             img_bytes = storage_manager.get_file_bytes(path_part)
                                             if img_bytes:
-                                                import base64
                                                 b64_str = base64.b64encode(img_bytes).decode('utf-8')
                                                 images.append(b64_str)
                                         except Exception as e:
