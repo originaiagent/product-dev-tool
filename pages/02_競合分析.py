@@ -109,56 +109,60 @@ if st.session_state.show_add_competitor:
             page_quality = st.selectbox("ページクオリティ", [1, 2, 3, 4, 5], index=2)
         with col_m5:
             review_power = st.selectbox("レビューパワー", [1, 2, 3, 4, 5], index=2)
+            
+        st.markdown("---")
         
-        col_submit, col_cancel = st.columns(2)
-        with col_submit:
-            submitted = st.form_submit_button("追加", type="primary", use_container_width=True)
-        with col_cancel:
-            cancelled = st.form_submit_button("キャンセル", use_container_width=True)
+        # ボタンはカラム分けせずシンプルに配置（トラブル防止）
+        submitted = st.form_submit_button("追加", type="primary", use_container_width=True)
+        # キャンセルボタンはフォームの外に出すのが定石だが、フォーム内にある場合は送信ボタンとして振る舞う
+        # ここではキャンセル用のフラグ管理が複雑になるため、追加ボタンのみフォームの機能とし、
+        # キャンセルはフォーム外のボタン、または「閉じる」アクションとするのが安全だが
+        # 既存コードを生かすため、まずはsubmit後の処理を確実にする
         
-        if submitted:
-            st.write(f"DEBUG: Submitted. Name: {name}")
-            if name:
-                try:
-                    st.write("DEBUG: Attempting to create competitor...")
-                    competitor = data_store.create("competitors", {
-                        "project_id": project_id,
-                        "name": name,
-                        "url": url,
-                        "price": price,
-                        "platform": platform,
-                        #"reviews": reviews, # 削除
-                        "sales": sales * 10000 if sales else None,
-                        "units": units if units else None,
-                        "images": [],
-                        "image_urls": [],
-                        "text_info": "",
-                        "extracted_data": {
-                            "seller_strength": seller_strength,
-                            "brand_power": brand_power,
-                            "specialization": specialization,
-                            "page_quality": page_quality,
-                            "review_power": review_power,
-                        }
-                    })
-                    st.write(f"DEBUG: Create result: {competitor}")
-                    
-                    if competitor:
-                        st.session_state.show_add_competitor = False
-                        st.success(f"✅ 競合「{name}」を追加しました")
-                        st.rerun()
-                    else:
-                        st.error("競合データの作成に失敗しました（データストアがNoneを返しました）")
-                except Exception as e:
-                    st.error(f"競合追加中にエラーが発生しました: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
-            else:
-                st.warning("競合名を入力してください")
-        
-        if cancelled:
-            st.session_state.show_add_competitor = False
-            st.rerun()
+    if submitted:
+        st.write(f"DEBUG: '追加' button pressed. Name: '{name}'")
+        if name:
+            try:
+                st.write("DEBUG: Creating competitor data...")
+                new_data = {
+                    "project_id": project_id,
+                    "name": name,
+                    "url": url,
+                    "price": price,
+                    "platform": platform,
+                    "sales": sales * 10000 if sales else None,
+                    "units": units if units else None,
+                    "images": [],
+                    "image_urls": [],
+                    "text_info": "",
+                    "extracted_data": {
+                        "seller_strength": seller_strength,
+                        "brand_power": brand_power,
+                        "specialization": specialization,
+                        "page_quality": page_quality,
+                        "review_power": review_power,
+                    }
+                }
+                
+                competitor = data_store.create("competitors", new_data)
+                st.write("DEBUG: Data created:", competitor)
+                
+                if competitor:
+                    st.session_state.show_add_competitor = False
+                    st.success(f"✅ 競合「{name}」を追加しました")
+                    st.rerun()
+                else:
+                    st.error("データの作成に失敗しました")
+            except Exception as e:
+                st.error(f"エラー: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+        else:
+            st.warning("競合名を入力してください")
+    
+    if st.button("キャンセル"):
+        st.session_state.show_add_competitor = False
+        st.rerun()
 
 st.markdown("---")
 
