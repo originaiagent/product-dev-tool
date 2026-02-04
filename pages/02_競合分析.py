@@ -116,30 +116,45 @@ if st.session_state.show_add_competitor:
         with col_cancel:
             cancelled = st.form_submit_button("キャンセル", use_container_width=True)
         
-        if submitted and name:
-            competitor = data_store.create("competitors", {
-                "project_id": project_id,
-                "name": name,
-                "url": url,
-                "price": price,
-                "platform": platform,
-                #"reviews": reviews, # 削除
-                "sales": sales * 10000 if sales else None,
-                "units": units if units else None,
-                "images": [],
-                "image_urls": [],
-                "text_info": "",
-                "extracted_data": {
-                    "seller_strength": seller_strength,
-                    "brand_power": brand_power,
-                    "specialization": specialization,
-                    "page_quality": page_quality,
-                    "review_power": review_power,
-                }
-            })
-            st.session_state.show_add_competitor = False
-            st.success(f"✅ 競合「{name}」を追加しました")
-            st.rerun()
+        if submitted:
+            st.write(f"DEBUG: Submitted. Name: {name}")
+            if name:
+                try:
+                    st.write("DEBUG: Attempting to create competitor...")
+                    competitor = data_store.create("competitors", {
+                        "project_id": project_id,
+                        "name": name,
+                        "url": url,
+                        "price": price,
+                        "platform": platform,
+                        #"reviews": reviews, # 削除
+                        "sales": sales * 10000 if sales else None,
+                        "units": units if units else None,
+                        "images": [],
+                        "image_urls": [],
+                        "text_info": "",
+                        "extracted_data": {
+                            "seller_strength": seller_strength,
+                            "brand_power": brand_power,
+                            "specialization": specialization,
+                            "page_quality": page_quality,
+                            "review_power": review_power,
+                        }
+                    })
+                    st.write(f"DEBUG: Create result: {competitor}")
+                    
+                    if competitor:
+                        st.session_state.show_add_competitor = False
+                        st.success(f"✅ 競合「{name}」を追加しました")
+                        st.rerun()
+                    else:
+                        st.error("競合データの作成に失敗しました（データストアがNoneを返しました）")
+                except Exception as e:
+                    st.error(f"競合追加中にエラーが発生しました: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+            else:
+                st.warning("競合名を入力してください")
         
         if cancelled:
             st.session_state.show_add_competitor = False
