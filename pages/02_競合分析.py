@@ -191,7 +191,12 @@ if st.session_state.show_add_competitor:
 st.markdown("---")
 
 # 競合一覧
+st.write(f"DEBUG: Listing competitors for project_id: {project_id}")
 competitors = data_store.list_by_parent("competitors", project_id)
+st.write(f"DEBUG: Retrieved {len(competitors)} competitors")
+if competitors:
+    with st.expander("🛠️ 取得済み競合データ一覧", expanded=False):
+        st.write(competitors)
 
 if competitors:
     # 競合カード（2列）
