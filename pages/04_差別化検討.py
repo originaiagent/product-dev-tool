@@ -288,10 +288,11 @@ with col_gen:
 st.markdown("---")
 
 # 差別化案一覧
+st.write("デバッグ: project_id =", project_id)
 ideas = data_store.list_by_parent("ideas", project_id)
+st.write("デバッグ: list_by_parent結果 =", ideas)
+st.write("デバッグ: ideas数 =", len(ideas) if ideas else 0)
 
-# デバッグ: 取得した差別化案を確認
-st.write(f"デバッグ: {len(ideas)}件の差別化案を取得")
 if ideas:
     with st.expander("デバッグ: 最初のアイデアの生データ"):
         st.write(ideas[0])
