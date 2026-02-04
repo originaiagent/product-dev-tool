@@ -7,6 +7,7 @@ import os
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+import streamlit as st
 from supabase import create_client, Client
 
 class DataStore:
@@ -41,14 +42,13 @@ class DataStore:
         if not url or not key:
             # Streamlit Secretsからの読み込みを試みる（ローカル実行時など）
             try:
-                import streamlit as st
                 url = st.secrets["SUPABASE_URL"]
                 key = st.secrets["SUPABASE_KEY"]
             except:
                 pass
 
         if not url or not key:
-            # 接続情報がない場合はエラーにはせず、空のクライアント状態にするか警告
+            st.error("Warning: SUPABASE_URL or SUPABASE_KEY not found. DataStore will be disabled.")
             print("Warning: SUPABASE_URL or SUPABASE_KEY not found.")
             self.supabase: Optional[Client] = None
         else:
@@ -60,12 +60,16 @@ class DataStore:
     def create(self, data_type: str, data: Dict) -> Dict:
         """新規作成"""
         if not self.supabase:
-            print(f"Error: Supabase client is not initialized. Cannot create {data_type}.")
+            msg = f"Error: Supabase client is not initialized. Cannot create {data_type}."
+            print(msg)
+            st.error(msg)
             return None # 明示的に失敗を返す
 
         table = self._get_table_name(data_type)
         if not table:
-            print(f"Error: No table mapping found for {data_type}.")
+            msg = f"Error: No table mapping found for {data_type}."
+            print(msg)
+            st.error(msg)
             return None
         
         # UUID付与 (Python側で生成して渡す)
@@ -85,11 +89,15 @@ class DataStore:
                 print(f"DEBUG: Successfully inserted {len(response.data)} rows.")
                 return response.data[0]
             else:
-                print("DEBUG: Insert executed but returned no data.")
+                msg = f"DEBUG: Insert executed but returned no data. Table: {table}"
+                print(msg)
+                st.error(msg)
         except Exception as e:
-            print(f"Supabase Create Error ({table}): {e}")
+            msg = f"Supabase Create Error ({table}): {e}"
+            print(msg)
+            st.error(msg)
             import traceback
-            print(traceback.format_exc())
+            st.code(traceback.format_exc())
             return None # エラー時はNoneを返す
         
         return None # データが返らなかった場合
