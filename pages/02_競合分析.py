@@ -119,29 +119,9 @@ if st.session_state.show_add_competitor:
         # キャンセルはフォーム外のボタン、または「閉じる」アクションとするのが安全だが
         # 既存コードを生かすため、まずはsubmit後の処理を確実にする
         
-    # デバッグログの表示
-    if "add_comp_debug" not in st.session_state:
-        st.session_state.add_comp_debug = []
-    
-    if st.session_state.add_comp_debug:
-        with st.expander("🛠️ 開発者用デバッグログ", expanded=True):
-            for log in st.session_state.add_comp_debug:
-                st.write(log)
-            if st.button("ログをクリア"):
-                st.session_state.add_comp_debug = []
-                st.rerun()
-
     if submitted:
-        log_msg = f"DEBUG: '追加' button pressed. Name: '{name}'"
-        st.session_state.add_comp_debug.append(log_msg)
-        print(log_msg)
-        
         if name:
             try:
-                log_msg = "DEBUG: Creating competitor data..."
-                st.session_state.add_comp_debug.append(log_msg)
-                print(log_msg)
-                
                 new_data = {
                     "project_id": project_id,
                     "name": name,
@@ -163,22 +143,15 @@ if st.session_state.show_add_competitor:
                 }
                 
                 competitor = data_store.create("competitors", new_data)
-                log_msg = f"DEBUG: Data creation result (id): {competitor.get('id') if isinstance(competitor, dict) else 'FAILED'}"
-                st.session_state.add_comp_debug.append(log_msg)
-                st.session_state.add_comp_debug.append(f"DEBUG: Data raw: {competitor}")
-                print(log_msg)
                 
                 if competitor:
-                    # st.session_state.show_add_competitor = False # デバッグのため開いたままにする
-                    st.success(f"✅ 競合「{name}」を追加しました。デバッグ確認のためリスタートを一時停止しています。")
-                    # st.rerun() # デバッグ情報を確認するためコメントアウト
+                    st.session_state.show_add_competitor = False
+                    st.success(f"✅ 競合「{name}」を追加しました")
+                    st.rerun()
                 else:
                     st.error("データの作成に失敗しました")
             except Exception as e:
-                err_msg = f"ERROR: {e}"
-                st.session_state.add_comp_debug.append(err_msg)
-                print(err_msg)
-                st.error(err_msg)
+                st.error(f"エラー: {e}")
                 import traceback
                 st.code(traceback.format_exc())
         else:
@@ -191,12 +164,7 @@ if st.session_state.show_add_competitor:
 st.markdown("---")
 
 # 競合一覧
-st.write(f"DEBUG: Listing competitors for project_id: {project_id}")
 competitors = data_store.list_by_parent("competitors", project_id)
-st.write(f"DEBUG: Retrieved {len(competitors)} competitors")
-if competitors:
-    with st.expander("🛠️ 取得済み競合データ一覧", expanded=False):
-        st.write(competitors)
 
 if competitors:
     # 競合カード（2列）
