@@ -103,7 +103,7 @@ class AIProvider:
         """Gemini APIでテキスト生成"""
         generation_config = {
             "temperature": temperature,
-            "max_output_tokens": max_tokens,
+            "max_output_tokens": 16000 if max_tokens == 4096 else max_tokens, # デフォルト4096を16000に引き上げ
         }
         
         model_instance = client.GenerativeModel(
